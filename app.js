@@ -55,6 +55,7 @@ const LABELS = ['biologisch', 'grootverpakking', 'light', 'glutenvrij', 'lactose
 function normalize(s){
   return (s||'').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[⁠​-‍﻿]/g,'')
     .replace(/[^a-z0-9 &']/g,' ')
     .replace(/\s+/g,' ').trim();
 }
@@ -153,8 +154,41 @@ function cleanItem(raw){
   const { qty, name } = parseQty(str);
   return { original, name, qty, skipped: false };
 }
+function splitOnInlineMarkers(line){
+  // If a single line contains multiple " <dash> " markers (typical when a
+  // multi-line list is pasted into a single-line input), split on them.
+  const markers = line.match(/\s[-•*–—]\s+/g);
+  if(!markers || markers.length < 2) return [line];
+  const out = [];
+  let buf = '';
+  let depth = 0;
+  let i = 0;
+  while(i < line.length){
+    const c = line[i];
+    if(c === '(') depth++;
+    else if(c === ')') depth = Math.max(0, depth - 1);
+    if(depth === 0 && i + 2 < line.length &&
+       /\s/.test(line[i]) && /[-•*–—]/.test(line[i+1]) && /\s/.test(line[i+2])){
+      if(buf.trim()) out.push(buf.trim());
+      buf = '';
+      i += 3;
+      continue;
+    }
+    buf += c;
+    i++;
+  }
+  if(buf.trim()) out.push(buf.trim());
+  return out;
+}
+
 function smartParse(text){
-  const rawLines = (text||'').replace(/\r\n/g, '\n').split('\n');
+  // Normalize input: strip invisible unicode, nbsp; unify newlines
+  text = (text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[⁠​-‍﻿]/g, '')
+    .replace(/ /g, ' ');
+  const rawLines = text.split('\n');
+  // Step 1: merge multi-line parens
   const merged = [];
   let buffer = '';
   for(let line of rawLines){
@@ -164,8 +198,13 @@ function smartParse(text){
     if(parensBalanced(buffer)){ merged.push(buffer); buffer = ''; }
   }
   if(buffer) merged.push(buffer);
+  // Step 2: split lines on inline markers (handles pasted multi-line lists in single-line inputs)
+  const expanded = [];
+  for(const line of merged) expanded.push(...splitOnInlineMarkers(line));
+  // Step 3: split on commas / semicolons (respecting parens)
   const split = [];
-  for(const line of merged) split.push(...splitRespectParens(line));
+  for(const line of expanded) split.push(...splitRespectParens(line));
+  // Step 4: clean each
   const items = [];
   const skipped = [];
   for(const raw of split){
@@ -930,23 +969,66 @@ function openLeader(){
   const ranked = state.members
     .map(m => ({ member: m, count: counts[m.id] || 0 }))
     .sort((a, b) => b.count - a.count);
+  const total = Math.max(1, state.items.length);
+  const remaining = state.items.filter(i => !i.done).length;
   const host = $('leaderList');
   host.innerHTML = '';
-  const medals = ['🥇', '🥈', '🥉'];
-  const rankClasses = ['gold', 'silver', 'bronze'];
-  ranked.forEach((r, i) => {
-    const row = document.createElement('div');
-    row.className = 'leader-row' + (i < 3 && r.count > 0 ? ' ' + rankClasses[i] : '');
-    row.innerHTML = `
-      <span class="leader-rank">${i < 3 && r.count > 0 ? medals[i] : '#' + (i+1)}</span>
-      <span class="avatar" style="background:${r.member.color}">${initials(r.member.name)}</span>
-      <span class="leader-name">${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? '<span class="you">jij</span>' : ''}</span>
-      <span class="leader-count">${r.count}</span>
-    `;
-    host.appendChild(row);
-  });
-  if(!ranked.length || ranked.every(r => r.count === 0)){
-    host.innerHTML = '<div class="hint">Nog niks afgevinkt. Eerste die iets pakt staat bovenaan!</div>';
+
+  // Camel race
+  const race = document.createElement('div');
+  race.className = 'race';
+  race.innerHTML = `
+    <div class="race-info">
+      <span class="race-label">Nog te kopen</span>
+      <span class="race-num">${remaining}</span>
+    </div>
+    <div class="race-track" id="raceTrack"></div>
+  `;
+  host.appendChild(race);
+  const track = race.querySelector('#raceTrack');
+
+  if(!ranked.length){
+    track.innerHTML = '<div class="hint" style="padding:14px">Geen deelnemers — nodig iemand uit met de QR-code.</div>';
+  } else {
+    ranked.forEach((r, idx) => {
+      const pct = Math.min(95, (r.count / total) * 95);
+      const isLeader = idx === 0 && r.count > 0;
+      const lane = document.createElement('div');
+      lane.className = 'race-lane' + (isLeader ? ' leader' : '');
+      lane.style.setProperty('--lane-color', r.member.color);
+      lane.innerHTML = `
+        <div class="lane-name" title="${escapeHtml(r.member.name)}">${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? ' <span class="you">·jij·</span>' : ''}</div>
+        <div class="lane-track">
+          <div class="lane-trail" style="width:${pct}%"></div>
+          <div class="lane-camel" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</div>
+          <div class="lane-finish">🏁</div>
+        </div>
+        <div class="lane-count">${r.count}</div>
+      `;
+      track.appendChild(lane);
+    });
+  }
+
+  // Ranking list below the race
+  if(ranked.some(r => r.count > 0)){
+    const rankingTitle = document.createElement('div');
+    rankingTitle.className = 'race-rank-title';
+    rankingTitle.textContent = 'Stand';
+    host.appendChild(rankingTitle);
+    const medals = ['🥇', '🥈', '🥉'];
+    const rankClasses = ['gold', 'silver', 'bronze'];
+    ranked.forEach((r, i) => {
+      if(r.count === 0) return;
+      const row = document.createElement('div');
+      row.className = 'leader-row' + (i < 3 ? ' ' + rankClasses[i] : '');
+      row.innerHTML = `
+        <span class="leader-rank">${i < 3 ? medals[i] : '#' + (i+1)}</span>
+        <span class="avatar" style="background:${r.member.color}">${initials(r.member.name)}</span>
+        <span class="leader-name">${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? '<span class="you">jij</span>' : ''}</span>
+        <span class="leader-count">${r.count}</span>
+      `;
+      host.appendChild(row);
+    });
   }
   $('leaderModal').hidden = false;
 }
@@ -1075,30 +1157,32 @@ function itemEl(it, cat){
   li.className = 'item';
   if(it.claimed_by && state.me && it.claimed_by === state.me.id) li.classList.add('claimed-by-me');
   li.dataset.id = it.id;
-  const badges = [];
-  if(cat.temp === 'gekoeld') badges.push('<span class="badge gekoeld">gekoeld</span>');
-  if(cat.temp === 'diepvries') badges.push('<span class="badge diepvries">diepvries</span>');
   const claimer = state.members.find(m => m.id === it.claimed_by);
   const doneBy = state.members.find(m => m.id === it.done_by);
   const assignChip = claimer
     ? `<button class="assign-chip has-claim" style="background:${claimer.color}" title="Gepakt door ${escapeHtml(claimer.name)}">${initials(claimer.name)}</button>`
     : `<button class="assign-chip" title="Toewijzen">+</button>`;
   const metaParts = [];
+  if(cat.temp === 'gekoeld') metaParts.push('<span class="badge gekoeld">gekoeld</span>');
+  if(cat.temp === 'diepvries') metaParts.push('<span class="badge diepvries">diepvries</span>');
   if(it.labels && it.labels.length) it.labels.forEach(l => metaParts.push(`<span class="mini-label">${escapeHtml(l)}</span>`));
   if(it.note) metaParts.push(`<span class="mini-note">📝 ${escapeHtml(it.note)}</span>`);
   if(it.alt) metaParts.push(`<span class="mini-alt">${escapeHtml(it.alt)}</span>`);
   if(doneBy && it.done) metaParts.push(`<span class="mini-label" style="color:${doneBy.color};border-color:${doneBy.color};background:rgba(255,255,255,0.05)">door ${escapeHtml(doneBy.name)}</span>`);
   li.innerHTML = `
     <span class="check"></span>
-    ${it.qty ? `<span class="qty">${escapeHtml(it.qty)}</span>` : ''}
     <div class="item-body">
-      <span class="label">${escapeHtml(it.name)}</span>
+      <div class="item-row1">
+        ${it.qty ? `<span class="qty">${escapeHtml(it.qty)}</span>` : ''}
+        <span class="label">${escapeHtml(it.name)}</span>
+      </div>
       ${metaParts.length ? `<div class="item-meta">${metaParts.join('')}</div>` : ''}
     </div>
-    ${badges.join(' ')}
-    ${assignChip}
-    <button class="edit-btn" type="button" title="Aanpassen" aria-label="Aanpassen">✎</button>
-    <button class="del" type="button" title="verwijder" aria-label="verwijder">✕</button>
+    <div class="item-actions">
+      ${assignChip}
+      <button class="edit-btn" type="button" title="Aanpassen" aria-label="Aanpassen">✎</button>
+      <button class="del" type="button" title="verwijder" aria-label="verwijder">✕</button>
+    </div>
   `;
   li.addEventListener('click', (e) => {
     if(e.target.closest('.del') || e.target.closest('.assign-chip') || e.target.closest('.edit-btn')) return;
@@ -1258,14 +1342,43 @@ function wireEvents(){
     const v = inp.value.trim();
     if(!v) return;
     const parsed = smartParse(v);
-    if(parsed.items.length){ await insertItems(parsed.items); inp.value = ''; }
-    else toast('Niks bruikbaars', {kind:'warn'});
+    if(!parsed.items.length){ toast('Niks bruikbaars', {kind:'warn'}); inp.focus(); return; }
+    if(parsed.items.length > 1){
+      inp.value = '';
+      const final = await showImportPreview(parsed);
+      if(final){ await insertItems(final); toast(`${final.length} toegevoegd`); }
+    } else {
+      await insertItems(parsed.items);
+      inp.value = '';
+    }
     inp.focus();
+  }
+  async function quickPaste(inpId, e){
+    const text = e.clipboardData?.getData('text') ?? '';
+    if(!text) return;
+    // If the pasted text clearly is a list (newlines or 2+ bullet markers),
+    // intercept and route through the batch parser — input would otherwise
+    // strip newlines.
+    const hasNewlines = /\n/.test(text);
+    const multiMarkers = (text.match(/\s[-•*–—]\s/g) || []).length >= 2;
+    if(!hasNewlines && !multiMarkers) return;
+    e.preventDefault();
+    const parsed = smartParse(text);
+    if(!parsed.items.length){ toast('Niks bruikbaars in plak', {kind:'warn'}); return; }
+    const inp = $(inpId); inp.value = '';
+    if(parsed.items.length > 1){
+      const final = await showImportPreview(parsed);
+      if(final){ await insertItems(final); toast(`${final.length} toegevoegd`); }
+    } else {
+      await insertItems(parsed.items);
+    }
   }
   $('addOne').onclick = () => quickAddFrom('quick');
   $('quick').onkeydown = (e) => { if(e.key === 'Enter'){ e.preventDefault(); quickAddFrom('quick'); } };
+  $('quick').addEventListener('paste', (e) => quickPaste('quick', e));
   $('shopAdd').onclick = () => quickAddFrom('shopQuick');
   $('shopQuick').onkeydown = (e) => { if(e.key === 'Enter'){ e.preventDefault(); quickAddFrom('shopQuick'); } };
+  $('shopQuick').addEventListener('paste', (e) => quickPaste('shopQuick', e));
 
   $('uncheckAll').onclick = () => bulkUpdate(i => i.done, { done: false, done_by: null });
   $('clearDone').onclick = () => { if(!state.items.some(i => i.done)) return; if(confirm('Alle afgevinkte items verwijderen?')) bulkDelete(i => i.done); };
@@ -1373,9 +1486,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v4'){
-      toast('Nieuw in v4: offline queue · drag-to-reorder · recept-import', { ttl: 8000 });
-      LS.set('grocereis.version', 'v4');
+    if(lastVer !== 'v5'){
+      toast('Nieuw in v5: kamelenrace 🐫 · betere item-layout · slimmer plakken', { ttl: 8000 });
+      LS.set('grocereis.version', 'v5');
     }
   }
 }

@@ -454,9 +454,9 @@ input[type="text"]:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba
 ul.items { list-style: none; }
 .item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 12px 12px;
+  padding: 12px 10px;
   margin-bottom: 6px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.03);
@@ -466,6 +466,11 @@ ul.items { list-style: none; }
   user-select: none;
   backdrop-filter: blur(8px);
 }
+.item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.item-row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.item-row1 .label { font-size: 16px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; hyphens: auto; word-break: normal; flex: 1; min-width: 0; }
+.item-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.item .check { margin-top: 3px; }
 .item:hover { background: rgba(138, 92, 255, 0.08); border-color: rgba(138, 92, 255, 0.55); transform: translateX(2px); }
 .gekoeld .item { border-color: rgba(0, 240, 255, 0.3); }
 .gekoeld .item:hover { background: rgba(0, 240, 255, 0.08); border-color: var(--cyan); }
@@ -509,13 +514,13 @@ ul.items { list-style: none; }
   background: rgba(255, 209, 102, 0.06);
 }
 .assign-chip {
-  width: 32px; height: 32px;
+  width: 28px; height: 28px;
   border-radius: 50%;
   border: 1.5px dashed rgba(138, 92, 255, 0.5);
   background: rgba(0,0,0,0.2);
   display: grid; place-items: center;
   font-family: 'Orbitron', sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--ink-dim);
   cursor: pointer;
@@ -532,11 +537,12 @@ ul.items { list-style: none; }
   border: 1px solid rgba(255,77,210,0.3);
   color: var(--pink);
   cursor: pointer;
-  width: 28px; height: 28px;
+  width: 26px; height: 26px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 12px;
   transition: all .15s;
   flex-shrink: 0;
+  padding: 0;
 }
 .del:hover { background: rgba(255,77,210,0.15); border-color: var(--pink); box-shadow: var(--glow-pink); }
 
@@ -968,11 +974,12 @@ ul.items { touch-action: pan-y; }
   border: 1px solid rgba(138, 92, 255, 0.3);
   color: var(--ink-dim);
   cursor: pointer;
-  width: 28px; height: 28px;
+  width: 26px; height: 26px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11px;
   transition: all .15s;
   flex-shrink: 0;
+  padding: 0;
 }
 .edit-btn:hover { border-color: var(--violet); color: var(--ink); }
 
@@ -1053,6 +1060,119 @@ ul.items { touch-action: pan-y; }
   transition: all .15s;
 }
 .mic-btn:hover { background: rgba(0, 240, 255, 0.22); box-shadow: var(--glow-cyan); }
+
+/* ============ KAMELENRACE ============ */
+.race {
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid rgba(138, 92, 255, 0.3);
+  border-radius: 16px;
+  padding: 14px 14px 18px;
+  margin-bottom: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.race::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 60px, rgba(255,255,255,0.03) 60px 62px);
+  pointer-events: none;
+}
+.race-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+.race-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.race-num {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  background: linear-gradient(90deg, var(--cyan), var(--pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.race-track {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+.race-lane {
+  display: grid;
+  grid-template-columns: 60px 1fr 32px;
+  gap: 10px;
+  align-items: center;
+}
+.lane-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lane-color, var(--ink));
+  text-shadow: 0 0 8px color-mix(in srgb, var(--lane-color, #fff) 50%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lane-name .you { font-size: 9px; opacity: 0.7; }
+.lane-track {
+  position: relative;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.35);
+  border: 1px dashed rgba(138,92,255,0.3);
+}
+.lane-trail {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--lane-color) 40%, transparent));
+  transition: width .6s cubic-bezier(.4,1.5,.6,1);
+}
+.lane-camel {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 26px;
+  transition: left .6s cubic-bezier(.4,1.5,.6,1);
+  filter: drop-shadow(0 0 8px var(--lane-color));
+  z-index: 2;
+}
+.race-lane.leader .lane-camel { animation: leaderBob 1.2s ease-in-out infinite; }
+@keyframes leaderBob {
+  50% { transform: translate(-50%, calc(-50% - 3px)); }
+}
+.lane-finish {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  z-index: 1;
+}
+.lane-count {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--lane-color);
+  text-align: right;
+}
+.race-rank-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin: 6px 0 4px;
+}
 
 /* ============ LEADERBOARD ============ */
 .leader-list { display: flex; flex-direction: column; gap: 8px; }
