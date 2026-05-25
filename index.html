@@ -144,15 +144,53 @@
 
 <!-- =================== LEADERBOARD =================== -->
 <div id="leaderModal" class="overlay" hidden>
-  <div class="card">
+  <div class="card wide">
     <h2>🏆 Wedstrijd</h2>
     <p class="hint">Wie heeft de meeste items in het mandje gegooid?</p>
     <div id="leaderList" class="leader-list"></div>
+    <details class="race-settings" id="raceSettings">
+      <summary>⚙️ Instellingen</summary>
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="settings-title">Beurt modus</div>
+          <label class="switch-row"><input type="checkbox" id="turnMode"> <span>Iedereen kiest omstebeurt items voordat de race start</span></label>
+          <label class="switch-row" id="perTurnRow" hidden>
+            <span>Items per beurt: <b id="perTurnVal">3</b></span>
+            <input type="range" id="perTurn" min="1" max="5" value="3" />
+          </label>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">Handicap per speler</div>
+          <p class="hint">Voor jongere/snellere spelers: een voorsprong (camel start vooruit) of eerste keuze (mogen vooraf items pakken).</p>
+          <div id="handicapList"></div>
+        </div>
+      </div>
+    </details>
     <div class="row">
-      <button class="btn" id="leaderClose" type="button">Sluit</button>
+      <button class="btn ghost" id="leaderClose" type="button">Sluit</button>
+      <button class="btn" id="startRace" type="button">🏁 Start race</button>
     </div>
   </div>
 </div>
+
+<!-- =================== TURN BANNER =================== -->
+<div id="turnBanner" class="turn-banner" hidden>
+  <div class="turn-avatar" id="turnAvatar"></div>
+  <div class="turn-text">
+    <div class="turn-name" id="turnName">—</div>
+    <div class="turn-sub" id="turnSub">kies items</div>
+  </div>
+  <button class="btn ghost small" id="turnSkip" type="button">Overslaan</button>
+  <button class="btn small" id="turnDone" type="button">Klaar →</button>
+</div>
+
+<!-- =================== COUNTDOWN OVERLAY =================== -->
+<div id="countdownOverlay" class="cd-overlay" hidden>
+  <div class="cd-num" id="cdNum">5</div>
+</div>
+
+<!-- =================== JINGLE =================== -->
+<audio id="jingle" preload="auto" src="jingle.mp3"></audio>
 
 <!-- =================== MAIN APP =================== -->
 <div class="wrap" id="app" hidden>

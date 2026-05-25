@@ -248,7 +248,10 @@ const state = {
   theme: LS.get('grocereis.theme', 'dark'),
   channel: null,
   editingId: null,
+  gameState: null,    // mirror of list.game_state
+  raceRunning: false, // visual race animation
 };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 /* ============================================================ */
 /* DOM helpers                                                   */
@@ -502,12 +505,30 @@ function subscribeRealtime(){
   const ch = supa.channel('list:' + state.list.id);
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${state.list.id}` }, payload => handleItemEvent(payload));
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `list_id=eq.${state.list.id}` }, payload => handleMemberEvent(payload));
+  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'lists', filter: `id=eq.${state.list.id}` }, payload => handleListEvent(payload));
   ch.subscribe(status => {
     $('syncStatus').textContent = status === 'SUBSCRIBED' ? 'live · sync aan' : 'connecting…';
     const dot = document.querySelector('.sync-card .dot');
     if(dot) dot.classList.toggle('off', status !== 'SUBSCRIBED');
   });
   state.channel = ch;
+}
+function handleListEvent(payload){
+  const { eventType, new: nw } = payload;
+  if(eventType === 'UPDATE' && nw){
+    state.list = nw;
+    const prevPhase = state.gameState?.phase;
+    state.gameState = nw.game_state || null;
+    const nextPhase = state.gameState?.phase;
+    // If the race just started elsewhere, show countdown locally too
+    if(prevPhase !== 'racing' && nextPhase === 'racing'){
+      runCountdownAndRace();
+    } else {
+      renderTurnBanner();
+      if(state.leaderOpen) renderLeader();
+    }
+    cacheState();
+  }
 }
 function handleItemEvent(payload){
   const { eventType, new: nw, old: od } = payload;
@@ -636,6 +657,7 @@ async function tryResume(code){
     const list = await getListByCode(code);
     if(!list){ LS.rm('grocereis.lastCode'); return !!cached; }
     state.list = list;
+    state.gameState = list.game_state || null;
     state.members = await fetchMembers(list.id);
     state.items = await fetchItems(list.id);
     const memberId = LS.get('grocereis.member.' + code);
@@ -651,6 +673,7 @@ async function tryResume(code){
     $('app').hidden = false;
     cacheState();
     render();
+    renderTurnBanner();
     subscribeRealtime();
     await renderQR(list.code);
     return true;
@@ -685,6 +708,7 @@ async function joinByCode(code){
 }
 async function joinAsMe(list, mePicked){
   state.list = list;
+  state.gameState = list.game_state || null;
   state.members = await fetchMembers(list.id);
   if(!mePicked.id){
     mePicked = await addMember(list.id, mePicked.name, mePicked.color);
@@ -962,21 +986,33 @@ async function confirmVoice(){
 /* Leaderboard                                                   */
 /* ============================================================ */
 function openLeader(){
+  state.leaderOpen = true;
+  $('leaderModal').hidden = false;
+  renderLeader();
+}
+function closeLeader(){
+  state.leaderOpen = false;
+  $('leaderModal').hidden = true;
+}
+function computeRaceData(){
   const counts = {};
   state.items.filter(i => i.done && i.done_by).forEach(i => {
     counts[i.done_by] = (counts[i.done_by] || 0) + 1;
   });
   const ranked = state.members
-    .map(m => ({ member: m, count: counts[m.id] || 0 }))
-    .sort((a, b) => b.count - a.count);
+    .map(m => ({ member: m, count: counts[m.id] || 0, handicap: m.handicap_offset || 0 }))
+    .sort((a, b) => (b.count + b.handicap) - (a.count + a.handicap));
   const total = Math.max(1, state.items.length);
+  return { counts, ranked, total };
+}
+function renderLeader(){
+  const { ranked, total } = computeRaceData();
   const remaining = state.items.filter(i => !i.done).length;
   const host = $('leaderList');
   host.innerHTML = '';
 
-  // Camel race
   const race = document.createElement('div');
-  race.className = 'race';
+  race.className = 'race' + (state.raceRunning ? ' running' : '');
   race.innerHTML = `
     <div class="race-info">
       <span class="race-label">Nog te kopen</span>
@@ -991,25 +1027,29 @@ function openLeader(){
     track.innerHTML = '<div class="hint" style="padding:14px">Geen deelnemers — nodig iemand uit met de QR-code.</div>';
   } else {
     ranked.forEach((r, idx) => {
-      const pct = Math.min(95, (r.count / total) * 95);
-      const isLeader = idx === 0 && r.count > 0;
+      const effective = r.count + r.handicap;
+      const pct = Math.min(95, (effective / total) * 95);
+      const startPct = Math.min(90, (r.handicap / total) * 95);
+      const isLeader = idx === 0 && effective > 0;
       const lane = document.createElement('div');
-      lane.className = 'race-lane' + (isLeader ? ' leader' : '');
+      lane.className = 'race-lane' + (isLeader ? ' leader' : '') + (r.handicap > 0 ? ' handicap' : '');
       lane.style.setProperty('--lane-color', r.member.color);
+      lane.style.setProperty('--handicap-pct', startPct + '%');
       lane.innerHTML = `
-        <div class="lane-name" title="${escapeHtml(r.member.name)}">${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? ' <span class="you">·jij·</span>' : ''}</div>
+        <div class="lane-name" title="${escapeHtml(r.member.name)}">
+          ${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? ' <span class="you">·jij·</span>' : ''}${r.member.pre_pick ? ' <span class="prepick">★</span>' : ''}
+        </div>
         <div class="lane-track">
           <div class="lane-trail" style="width:${pct}%"></div>
           <div class="lane-camel" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</div>
           <div class="lane-finish">🏁</div>
         </div>
-        <div class="lane-count">${r.count}</div>
+        <div class="lane-count">${r.count}${r.handicap ? `+${r.handicap}` : ''}</div>
       `;
       track.appendChild(lane);
     });
   }
 
-  // Ranking list below the race
   if(ranked.some(r => r.count > 0)){
     const rankingTitle = document.createElement('div');
     rankingTitle.className = 'race-rank-title';
@@ -1030,7 +1070,195 @@ function openLeader(){
       host.appendChild(row);
     });
   }
+
+  renderHandicapSettings();
+}
+
+function renderHandicapSettings(){
+  const list = $('handicapList');
+  if(!list) return;
+  list.innerHTML = '';
+  state.members.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'handicap-row';
+    row.innerHTML = `
+      <span class="avatar" style="background:${m.color}">${initials(m.name)}</span>
+      <span class="h-name">${escapeHtml(m.name)}${state.me && m.id === state.me.id ? '<span class="you">jij</span>' : ''}</span>
+      <span class="h-number">+<input type="number" min="0" max="20" value="${m.handicap_offset || 0}" data-member="${m.id}" data-field="handicap_offset"></span>
+      <label class="h-pre"><input type="checkbox" data-member="${m.id}" data-field="pre_pick" ${m.pre_pick ? 'checked' : ''}> eerste keus</label>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('input[data-member]').forEach(inp => {
+    inp.onchange = async () => {
+      const id = inp.dataset.member;
+      const field = inp.dataset.field;
+      const val = field === 'pre_pick' ? inp.checked : Math.max(0, Math.min(20, parseInt(inp.value, 10) || 0));
+      const m = state.members.find(x => x.id === id);
+      if(m){ m[field] = val; }
+      await safeOp({ table: 'members', op: 'update', id, patch: { [field]: val } });
+      if(state.leaderOpen) renderLeader();
+    };
+  });
+  // Beurt modus toggle
+  const tm = $('turnMode');
+  const pr = $('perTurnRow');
+  const gs = state.gameState;
+  const initialOn = !!(gs && gs.phase === 'turns');
+  tm.checked = initialOn;
+  pr.hidden = !initialOn;
+  $('perTurn').value = gs?.perTurn || 3;
+  $('perTurnVal').textContent = $('perTurn').value;
+  tm.onchange = () => { pr.hidden = !tm.checked; };
+  $('perTurn').oninput = () => { $('perTurnVal').textContent = $('perTurn').value; };
+}
+
+/* ============================================================ */
+/* Race start flow                                               */
+/* ============================================================ */
+async function startRaceFlow(){
+  const turnsEnabled = $('turnMode')?.checked;
+  const perTurn = parseInt($('perTurn')?.value || '3', 10);
+  closeLeader();
+
+  // Pre-pick phase: members with pre_pick=true claim items first
+  const prePickers = state.members.filter(m => m.pre_pick);
+  if(prePickers.length){
+    await runTurnPhase(prePickers, perTurn, 'eerste keus');
+  }
+
+  // Beurt modus: cycle through all members (in join order)
+  if(turnsEnabled){
+    const order = state.members.slice().sort((a,b) =>
+      new Date(a.joined_at) - new Date(b.joined_at)
+    );
+    await runTurnPhase(order, perTurn, 'kies items');
+  }
+
+  // Countdown + jingle + race
+  await setGameState({ phase: 'racing', startedAt: Date.now() });
+}
+
+function runTurnPhase(members, perTurn, label){
+  return new Promise(async (resolve) => {
+    const gs = {
+      phase: 'turns',
+      perTurn,
+      label,
+      memberOrder: members.map(m => m.id),
+      currentIndex: 0,
+      claimsThisTurn: 0,
+      _resolve: true // sentinel ignored on remote
+    };
+    await setGameState(gs);
+    // Wait until phase changes (handleListEvent or our nextTurn drives it)
+    const interval = setInterval(() => {
+      const cur = state.gameState;
+      if(!cur || cur.phase !== 'turns' || cur.label !== label){
+        clearInterval(interval);
+        resolve();
+      }
+    }, 200);
+  });
+}
+
+async function nextTurn(){
+  const gs = state.gameState;
+  if(!gs || gs.phase !== 'turns') return;
+  const nextIdx = gs.currentIndex + 1;
+  if(nextIdx >= gs.memberOrder.length){
+    await setGameState(null);
+    return;
+  }
+  await setGameState({ ...gs, currentIndex: nextIdx, claimsThisTurn: 0 });
+}
+
+async function setGameState(gs){
+  state.gameState = gs;
+  if(state.list){ state.list.game_state = gs; }
+  renderTurnBanner();
+  if(state.leaderOpen) renderLeader();
+  if(state.list){
+    await safeOp({ table: 'lists', op: 'update', id: state.list.id, patch: { game_state: gs } });
+  }
+  if(gs?.phase === 'racing'){
+    runCountdownAndRace();
+  }
+}
+
+function renderTurnBanner(){
+  const gs = state.gameState;
+  const banner = $('turnBanner');
+  if(!gs || gs.phase !== 'turns' || !gs.memberOrder?.length){
+    banner.hidden = true;
+    document.body.classList.remove('has-turn-banner');
+    return;
+  }
+  const current = state.members.find(m => m.id === gs.memberOrder[gs.currentIndex]);
+  if(!current){ banner.hidden = true; document.body.classList.remove('has-turn-banner'); return; }
+  banner.hidden = false;
+  document.body.classList.add('has-turn-banner');
+  const av = $('turnAvatar');
+  av.style.background = current.color;
+  av.textContent = initials(current.name);
+  const isMe = state.me && current.id === state.me.id;
+  $('turnName').textContent = isMe ? `Jouw beurt` : `${current.name} aan zet`;
+  $('turnSub').textContent = `${gs.label} · ${gs.perTurn} item${gs.perTurn === 1 ? '' : 's'}`;
+}
+
+/* ============================================================ */
+/* Countdown + race animation                                    */
+/* ============================================================ */
+let countdownActive = false;
+async function runCountdownAndRace(){
+  if(countdownActive) return;
+  countdownActive = true;
+  const ov = $('countdownOverlay');
+  const num = $('cdNum');
+  ov.hidden = false;
+  // 5 → 1
+  for(let n = 5; n >= 1; n--){
+    num.classList.remove('go');
+    num.textContent = String(n);
+    num.style.animation = 'none';
+    void num.offsetWidth;
+    num.style.animation = '';
+    await sleep(800);
+  }
+  // GO!
+  num.textContent = 'GO!';
+  num.classList.add('go');
+  try { const j = $('jingle'); j.currentTime = 0; await j.play(); } catch(e){ console.warn('jingle play failed', e); }
+  await sleep(1100);
+  ov.hidden = true;
+  countdownActive = false;
+  // Open leaderboard with race animation
+  state.raceRunning = true;
+  state.leaderOpen = true;
   $('leaderModal').hidden = false;
+  // First render with all camels at 0%, then animate to actual positions
+  renderRaceAnimated();
+  // Clear racing phase after a bit
+  setTimeout(async () => {
+    state.raceRunning = false;
+    if(state.gameState?.phase === 'racing') await setGameState(null);
+    if(state.leaderOpen) renderLeader();
+  }, 4500);
+}
+function renderRaceAnimated(){
+  renderLeader();
+  // Snap camels to 0%, then transition to target pct
+  const camels = document.querySelectorAll('.lane-camel');
+  const trails = document.querySelectorAll('.lane-trail');
+  const targets = Array.from(camels).map(c => c.style.left);
+  const trailTargets = Array.from(trails).map(t => t.style.width);
+  camels.forEach(c => { c.style.transition = 'none'; c.style.left = '0%'; });
+  trails.forEach(t => { t.style.transition = 'none'; t.style.width = '0%'; });
+  void document.body.offsetWidth;
+  requestAnimationFrame(() => {
+    camels.forEach((c, i) => { c.style.transition = ''; c.style.left = targets[i]; });
+    trails.forEach((t, i) => { t.style.transition = 'width 1.2s cubic-bezier(.45,.05,.55,1)'; t.style.width = trailTargets[i]; });
+  });
 }
 
 /* ============================================================ */
@@ -1321,7 +1549,10 @@ function wireEvents(){
     applyTheme();
   };
   $('leaderBtn').onclick = openLeader;
-  $('leaderClose').onclick = () => { $('leaderModal').hidden = true; };
+  $('leaderClose').onclick = closeLeader;
+  $('startRace').onclick = startRaceFlow;
+  $('turnDone').onclick = nextTurn;
+  $('turnSkip').onclick = nextTurn;
 
   $('addBatch').onclick = async () => {
     const txt = $('batch').value;
@@ -1486,9 +1717,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v5'){
-      toast('Nieuw in v5: kamelenrace 🐫 · betere item-layout · slimmer plakken', { ttl: 8000 });
-      LS.set('grocereis.version', 'v5');
+    if(lastVer !== 'v6'){
+      toast('Nieuw in v6: race countdown + jingle 🎶 · beurt modus · handicap · camels nu de juiste kant op', { ttl: 9000 });
+      LS.set('grocereis.version', 'v6');
     }
   }
 }

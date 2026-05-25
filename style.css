@@ -1140,16 +1140,32 @@ ul.items { touch-action: pan-y; }
 .lane-camel {
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scaleX(-1);
   font-size: 26px;
-  transition: left .6s cubic-bezier(.4,1.5,.6,1);
+  transition: left 1.2s cubic-bezier(.45, .05, .55, 1);
   filter: drop-shadow(0 0 8px var(--lane-color));
   z-index: 2;
+  will-change: left;
 }
 .race-lane.leader .lane-camel { animation: leaderBob 1.2s ease-in-out infinite; }
 @keyframes leaderBob {
-  50% { transform: translate(-50%, calc(-50% - 3px)); }
+  0%, 100% { transform: translate(-50%, -50%) scaleX(-1); }
+  50%      { transform: translate(-50%, calc(-50% - 3px)) scaleX(-1); }
 }
+.race.running .lane-camel { animation: gallop .35s ease-in-out infinite; }
+@keyframes gallop {
+  0%, 100% { transform: translate(-50%, -50%) scaleX(-1) rotate(-2deg); }
+  50%      { transform: translate(-50%, calc(-50% - 4px)) scaleX(-1) rotate(2deg); }
+}
+.race-lane.handicap .lane-track::after {
+  content: '';
+  position: absolute;
+  left: var(--handicap-pct, 0%);
+  top: 0; bottom: 0; width: 2px;
+  background: rgba(255, 209, 102, 0.5);
+  box-shadow: 0 0 6px rgba(255, 209, 102, 0.6);
+}
+.lane-name .prepick { color: var(--warn); font-size: 9px; margin-left: 4px; }
 .lane-finish {
   position: absolute;
   right: 4px;
@@ -1269,6 +1285,170 @@ body.light .popover { background: rgba(255,255,255,0.95); color: var(--ink); }
 body.light .history-chip { background: rgba(255,255,255,0.4); }
 body.light h1 { background: linear-gradient(90deg, var(--ink), #0070a0 40%, #d020a0 80%); -webkit-background-clip: text; background-clip: text; }
 
+/* ============ RACE SETTINGS ============ */
+.race-settings {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(138,92,255,0.25);
+  border-radius: 12px;
+  padding: 0;
+  margin: 4px 0 8px;
+}
+.race-settings summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.race-settings summary::-webkit-details-marker { display: none; }
+.race-settings .settings-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+.settings-section { border-top: 1px dashed rgba(138,92,255,0.18); padding-top: 10px; }
+.settings-section:first-child { border-top: none; padding-top: 0; }
+.settings-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 8px;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.switch-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--cyan); }
+.switch-row input[type="range"] { flex: 1; accent-color: var(--pink); }
+.handicap-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px dashed rgba(138,92,255,0.1);
+}
+.handicap-row:first-of-type { border-top: none; }
+.handicap-row .avatar { margin: 0; width: 28px; height: 28px; border: none; font-size: 9px; }
+.handicap-row .h-name { font-size: 13px; }
+.handicap-row .h-name .you { font-size: 10px; opacity: 0.6; margin-left: 4px; }
+.handicap-row .h-number {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--ink-dim);
+}
+.handicap-row .h-number input {
+  width: 48px;
+  padding: 4px 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  text-align: center;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(138, 92, 255, 0.35);
+  border-radius: 6px;
+  color: var(--ink);
+}
+.handicap-row .h-pre {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--ink-dim);
+  cursor: pointer;
+}
+.handicap-row .h-pre input { accent-color: var(--warn); width: 16px; height: 16px; }
+.btn.small { padding: 8px 12px; font-size: 10px; }
+
+/* ============ TURN BANNER ============ */
+.turn-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(8, 6, 30, 0.95);
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  padding: 8px 12px 8px 8px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.7), var(--glow-cyan);
+  max-width: calc(100vw - 24px);
+  animation: turnIn .3s ease-out;
+}
+@keyframes turnIn { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translateX(-50%); } }
+.turn-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  color: #04041a;
+  flex-shrink: 0;
+  border: 2px solid #fff;
+}
+.turn-text { min-width: 0; }
+.turn-name { font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: 1px; }
+.turn-sub { font-size: 11px; color: var(--ink-dim); }
+body.has-turn-banner { padding-top: 60px; }
+
+/* ============ COUNTDOWN OVERLAY ============ */
+.cd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(26, 0, 51, 0.95), rgba(4, 4, 26, 0.98));
+  backdrop-filter: blur(30px) saturate(160%);
+  animation: cdBgFade .3s ease-out;
+  overflow: hidden;
+}
+@keyframes cdBgFade { from { opacity: 0; } to { opacity: 1; } }
+.cd-overlay::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(40% 60% at 20% 30%,  rgba(0, 240, 255, 0.4), transparent 60%),
+    radial-gradient(40% 60% at 80% 70%,  rgba(255, 77, 210, 0.4), transparent 60%);
+  filter: blur(40px);
+  animation: cdSwirl 4s linear infinite;
+}
+@keyframes cdSwirl { to { transform: rotate(360deg); } }
+.cd-num {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(160px, 38vw, 320px);
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--cyan), var(--violet) 40%, var(--pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 0 100px rgba(138, 92, 255, 0.6);
+  position: relative;
+  z-index: 1;
+  animation: cdPop .9s cubic-bezier(.34, 1.56, .64, 1);
+}
+@keyframes cdPop {
+  0%   { transform: scale(0.2); opacity: 0; filter: blur(20px); }
+  30%  { transform: scale(1.2); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1);   opacity: 0.95; }
+}
+.cd-num.go {
+  font-size: clamp(120px, 32vw, 260px);
+  letter-spacing: 6px;
+  animation: cdGo 1.2s cubic-bezier(.34, 1.56, .64, 1);
+}
+@keyframes cdGo {
+  0%   { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+  25%  { transform: scale(1.5) rotate(6deg);  opacity: 1; }
+  60%  { transform: scale(1.15) rotate(-2deg); }
+  100% { transform: scale(1.3) rotate(0);     opacity: 0; }
+}
+
 @media (max-width: 480px) {
   h1 { letter-spacing: 2px; }
   .shop-toggle { font-size: 10px; padding: 9px 12px; }
@@ -1279,4 +1459,6 @@ body.light h1 { background: linear-gradient(90deg, var(--ink), #0070a0 40%, #d02
   .code-display { font-size: 22px; letter-spacing: 4px; }
   .card { padding: 22px; }
   .icon-btn { width: 34px; height: 34px; font-size: 14px; }
+  .race-lane { grid-template-columns: 50px 1fr 28px; gap: 6px; }
+  .lane-name { font-size: 11px; }
 }
