@@ -3,607 +3,123 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#06061a" />
+<meta name="theme-color" content="#04041a" />
 <title>GROCEREIS // neon shopping OS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<style>
-  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg-0: #04041a;
-    --bg-1: #0a0530;
-    --ink: #e8ecff;
-    --ink-dim: #9aa3d4;
-    --cyan: #00f0ff;
-    --violet: #8a5cff;
-    --pink: #ff4dd2;
-    --mint: #5cffd8;
-    --warn: #ffd166;
-    --frost: rgba(255, 255, 255, 0.06);
-    --frost-2: rgba(255, 255, 255, 0.1);
-    --line: rgba(138, 92, 255, 0.35);
-    --glow-cyan: 0 0 24px rgba(0, 240, 255, 0.45);
-    --glow-pink: 0 0 24px rgba(255, 77, 210, 0.45);
-    --glow-violet: 0 0 28px rgba(138, 92, 255, 0.55);
-  }
-  html, body { min-height: 100%; }
-  body {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    color: var(--ink);
-    background: var(--bg-0);
-    min-height: 100vh;
-    overflow-x: hidden;
-    position: relative;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
-
-  /* aurora background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: -20%;
-    background:
-      radial-gradient(40% 50% at 15% 10%,  rgba(138, 92, 255, 0.55), transparent 70%),
-      radial-gradient(45% 55% at 90% 30%,  rgba(0, 240, 255, 0.45), transparent 70%),
-      radial-gradient(50% 60% at 70% 100%, rgba(255, 77, 210, 0.55), transparent 70%),
-      radial-gradient(60% 80% at 30% 90%,  rgba(92, 255, 216, 0.30), transparent 70%);
-    filter: blur(40px) saturate(140%);
-    z-index: 0;
-    animation: aurora 26s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
-  @keyframes aurora {
-    0%   { transform: translate3d(-2%,-3%, 0) rotate(0deg)   scale(1.05); }
-    50%  { transform: translate3d( 3%, 2%, 0) rotate(2deg)   scale(1.15); }
-    100% { transform: translate3d(-1%, 3%, 0) rotate(-2deg)  scale(1.08); }
-  }
-  /* subtle dot grid */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px) 0 0 / 32px 32px;
-    z-index: 1;
-    pointer-events: none;
-    mask-image: radial-gradient(ellipse at center, black 30%, transparent 90%);
-    -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 90%);
-  }
-
-  .wrap {
-    position: relative;
-    z-index: 2;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 22px 16px 140px;
-  }
-
-  /* ============ HEADER ============ */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 22px;
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .logo {
-    width: 44px; height: 44px;
-    border-radius: 12px;
-    background:
-      linear-gradient(135deg, var(--cyan), var(--violet) 50%, var(--pink));
-    display: grid;
-    place-items: center;
-    color: #04041a;
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 900;
-    font-size: 18px;
-    letter-spacing: -1px;
-    box-shadow: var(--glow-violet), inset 0 0 16px rgba(255,255,255,0.4);
-    position: relative;
-  }
-  .logo::after {
-    content: '';
-    position: absolute; inset: 1px;
-    border-radius: 11px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.4), transparent 50%);
-    pointer-events: none;
-  }
-  h1 {
-    font-family: 'Orbitron', sans-serif;
-    font-size: clamp(20px, 4.5vw, 28px);
-    font-weight: 900;
-    letter-spacing: 4px;
-    background: linear-gradient(90deg, #fff, var(--cyan) 40%, var(--pink) 80%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    line-height: 1;
-  }
-  .sub {
-    font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    margin-top: 4px;
-  }
-  .shop-toggle {
-    appearance: none;
-    border: 1px solid rgba(0, 240, 255, 0.4);
-    background: rgba(0, 240, 255, 0.08);
-    color: var(--cyan);
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
-    font-size: 11px;
-    letter-spacing: 2px;
-    padding: 10px 14px;
-    border-radius: 999px;
-    cursor: pointer;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    transition: all .2s;
-    white-space: nowrap;
-  }
-  .shop-toggle:hover {
-    background: rgba(0, 240, 255, 0.18);
-    box-shadow: var(--glow-cyan);
-    transform: translateY(-1px);
-  }
-  body.shop .shop-toggle {
-    background: linear-gradient(135deg, var(--pink), var(--violet));
-    border-color: transparent;
-    color: #fff;
-    box-shadow: var(--glow-pink);
-  }
-
-  /* ============ PANELS (glass) ============ */
-  .panel {
-    background: linear-gradient(180deg, rgba(20, 14, 60, 0.55), rgba(8, 6, 30, 0.55));
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 18px;
-    margin-bottom: 18px;
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.04) inset,
-      0 20px 60px -20px rgba(0,0,0,0.7),
-      0 0 60px -20px rgba(138, 92, 255, 0.35);
-    position: relative;
-    overflow: hidden;
-  }
-  .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba(0,240,255,0.55), transparent 35%, transparent 65%, rgba(255,77,210,0.55));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    pointer-events: none;
-  }
-  .panel-title {
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
-    font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .panel-title::before {
-    content: '';
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--cyan);
-    box-shadow: var(--glow-cyan);
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse { 50% { opacity: 0.4; transform: scale(0.85); } }
-
-  textarea {
-    width: 100%;
-    min-height: 110px;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(138, 92, 255, 0.3);
-    border-radius: 12px;
-    color: var(--ink);
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 16px;
-    line-height: 1.45;
-    padding: 12px 14px;
-    resize: vertical;
-    outline: none;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  textarea:focus {
-    border-color: var(--cyan);
-    box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.15), var(--glow-cyan);
-  }
-  textarea::placeholder { color: rgba(154, 163, 212, 0.5); }
-
-  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-
-  .btn {
-    appearance: none;
-    border: none;
-    background: linear-gradient(135deg, var(--cyan), var(--violet) 60%, var(--pink));
-    color: #04041a;
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 700;
-    font-size: 12px;
-    letter-spacing: 2px;
-    padding: 12px 18px;
-    border-radius: 999px;
-    cursor: pointer;
-    flex: 1 1 auto;
-    transition: transform .12s, box-shadow .2s, filter .2s;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.2) inset,
-      0 8px 24px -8px rgba(138, 92, 255, 0.7),
-      var(--glow-violet);
-    position: relative;
-    overflow: hidden;
-  }
-  .btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
-  .btn:active { transform: translateY(0); }
-  .btn.ghost {
-    background: rgba(255,255,255,0.04);
-    color: var(--ink);
-    border: 1px solid rgba(138, 92, 255, 0.4);
-    box-shadow: none;
-    backdrop-filter: blur(10px);
-  }
-  .btn.ghost:hover { background: rgba(138, 92, 255, 0.12); border-color: var(--violet); }
-  .btn.danger {
-    background: transparent;
-    color: var(--warn);
-    border: 1px solid rgba(255, 209, 102, 0.5);
-    box-shadow: none;
-  }
-  .btn.danger:hover { background: rgba(255, 209, 102, 0.08); }
-
-  .quick-add { display: flex; gap: 8px; margin-top: 10px; }
-  .quick-add input {
-    flex: 1;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(138, 92, 255, 0.3);
-    border-radius: 999px;
-    color: var(--ink);
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15px;
-    padding: 11px 16px;
-    outline: none;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  .quick-add input:focus {
-    border-color: var(--pink);
-    box-shadow: 0 0 0 3px rgba(255, 77, 210, 0.15), var(--glow-pink);
-  }
-  .quick-add .btn {
-    flex: 0 0 auto;
-    width: 48px; height: 48px;
-    padding: 0;
-    font-size: 22px;
-    display: grid; place-items: center;
-  }
-
-  /* ============ STATS ============ */
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin: 8px 0 18px;
-  }
-  .stat {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(138,92,255,0.25);
-    border-radius: 14px;
-    padding: 10px 12px;
-    text-align: center;
-    backdrop-filter: blur(10px);
-  }
-  .stat .label {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 9px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--ink-dim);
-  }
-  .stat .num {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 24px;
-    font-weight: 900;
-    margin-top: 2px;
-    background: linear-gradient(90deg, var(--cyan), var(--pink));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* progress */
-  .progress {
-    height: 4px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 999px;
-    overflow: hidden;
-    margin: -6px 2px 16px;
-    position: relative;
-  }
-  .progress > span {
-    display: block;
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, var(--cyan), var(--violet), var(--pink));
-    box-shadow: var(--glow-pink);
-    transition: width .4s cubic-bezier(.4,1.5,.6,1);
-  }
-
-  /* ============ CATEGORY ============ */
-  .cat { margin-bottom: 16px; }
-  .cat-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-    border-radius: 14px;
-    background: linear-gradient(90deg, rgba(138, 92, 255, 0.18), rgba(138, 92, 255, 0));
-    border-left: 3px solid var(--violet);
-    backdrop-filter: blur(10px);
-  }
-  .cat-head .ico { font-size: 18px; filter: drop-shadow(0 0 8px var(--violet)); }
-  .cat-head .name {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--ink);
-  }
-  .cat-head .count {
-    margin-left: auto;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--violet);
-    background: rgba(138, 92, 255, 0.12);
-    padding: 4px 10px;
-    border-radius: 999px;
-  }
-  .cat.gekoeld .cat-head {
-    background: linear-gradient(90deg, rgba(0, 240, 255, 0.18), rgba(0, 240, 255, 0));
-    border-left-color: var(--cyan);
-  }
-  .cat.gekoeld .cat-head .ico { filter: drop-shadow(0 0 8px var(--cyan)); }
-  .cat.gekoeld .cat-head .count { color: var(--cyan); background: rgba(0, 240, 255, 0.12); }
-  .cat.diepvries .cat-head {
-    background: linear-gradient(90deg, rgba(92, 255, 216, 0.22), rgba(92, 255, 216, 0));
-    border-left-color: var(--mint);
-  }
-  .cat.diepvries .cat-head .ico { filter: drop-shadow(0 0 8px var(--mint)); }
-  .cat.diepvries .cat-head .count { color: var(--mint); background: rgba(92, 255, 216, 0.12); }
-
-  ul.items { list-style: none; }
-  .item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    margin-bottom: 6px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(138, 92, 255, 0.22);
-    cursor: pointer;
-    transition: background .15s, border-color .15s, transform .12s;
-    user-select: none;
-    backdrop-filter: blur(8px);
-  }
-  .item:hover {
-    background: rgba(138, 92, 255, 0.08);
-    border-color: rgba(138, 92, 255, 0.55);
-    transform: translateX(2px);
-  }
-  .gekoeld .item { border-color: rgba(0, 240, 255, 0.3); }
-  .gekoeld .item:hover { background: rgba(0, 240, 255, 0.08); border-color: var(--cyan); }
-  .diepvries .item {
-    border-color: rgba(92, 255, 216, 0.4);
-    background: rgba(92, 255, 216, 0.04);
-  }
-  .diepvries .item:hover { background: rgba(92, 255, 216, 0.1); border-color: var(--mint); }
-
-  .check {
-    width: 26px; height: 26px;
-    border-radius: 8px;
-    border: 1.5px solid rgba(138, 92, 255, 0.55);
-    background: rgba(0,0,0,0.3);
-    flex-shrink: 0;
-    display: grid; place-items: center;
-    transition: all .2s;
-  }
-  .item:hover .check { border-color: var(--violet); box-shadow: var(--glow-violet); }
-  .item .label { flex: 1; font-size: 17px; font-weight: 500; line-height: 1.2; }
-  .badge {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  .badge.gekoeld {
-    color: var(--cyan); border-color: rgba(0,240,255,0.5);
-    background: rgba(0,240,255,0.08);
-  }
-  .badge.diepvries {
-    color: var(--mint); border-color: rgba(92,255,216,0.55);
-    background: rgba(92,255,216,0.1);
-  }
-  .qty {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--warn);
-    padding: 4px 8px;
-    border: 1px solid rgba(255, 209, 102, 0.45);
-    border-radius: 999px;
-    background: rgba(255, 209, 102, 0.06);
-  }
-  .del {
-    background: transparent;
-    border: 1px solid rgba(255,77,210,0.3);
-    color: var(--pink);
-    cursor: pointer;
-    width: 28px; height: 28px;
-    border-radius: 8px;
-    font-size: 14px;
-    transition: all .15s;
-  }
-  .del:hover { background: rgba(255,77,210,0.15); border-color: var(--pink); box-shadow: var(--glow-pink); }
-
-  /* ============ DONE / CART ============ */
-  .done-section { margin-top: 22px; }
-  .done-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    border-radius: 14px;
-    border: 1px dashed rgba(255, 77, 210, 0.45);
-    background: rgba(255, 77, 210, 0.05);
-    margin-bottom: 10px;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--pink);
-  }
-  .done-head .count { margin-left: auto; color: var(--ink); background: rgba(255,77,210,0.15); padding: 4px 10px; border-radius: 999px; }
-  .done .item {
-    opacity: 0.55;
-    background: rgba(255, 255, 255, 0.02);
-    border-color: rgba(138, 92, 255, 0.15);
-  }
-  .done .item .label { text-decoration: line-through; text-decoration-color: var(--pink); }
-  .done .item .check {
-    background: linear-gradient(135deg, var(--cyan), var(--pink));
-    border-color: transparent;
-    box-shadow: var(--glow-pink);
-  }
-  .done .item .check::after {
-    content: '';
-    width: 12px; height: 6px;
-    border-left: 2px solid #04041a;
-    border-bottom: 2px solid #04041a;
-    transform: rotate(-45deg) translate(1px, -2px);
-  }
-
-  .empty {
-    text-align: center;
-    color: var(--ink-dim);
-    font-size: 15px;
-    padding: 24px;
-    border: 1px dashed rgba(138, 92, 255, 0.25);
-    border-radius: 14px;
-  }
-
-  /* ============ SHOP MODE ============ */
-  body.shop .upload-panel { display: none; }
-  body.shop .actions-row { display: none; }
-  body.shop .stats { margin-top: 0; }
-  body.shop .item { padding: 16px 16px; }
-  body.shop .item .label { font-size: 19px; font-weight: 600; }
-  body.shop .check { width: 30px; height: 30px; }
-  body.shop .cat-head .name { font-size: 13px; }
-  /* In shop mode the cart goes above the todo list */
-  .layout { display: flex; flex-direction: column; gap: 8px; }
-  body.shop .layout { flex-direction: column-reverse; }
-  body.shop .done-section { margin-top: 0; margin-bottom: 18px; }
-
-  /* sticky shop-mode quick add bar */
-  .shop-bar {
-    position: fixed;
-    left: 50%;
-    bottom: 14px;
-    transform: translateX(-50%);
-    z-index: 20;
-    display: none;
-    align-items: center;
-    gap: 8px;
-    background: rgba(8, 6, 30, 0.85);
-    border: 1px solid rgba(0,240,255,0.4);
-    border-radius: 999px;
-    padding: 6px 6px 6px 16px;
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.8), var(--glow-cyan);
-    max-width: calc(100vw - 24px);
-  }
-  body.shop .shop-bar { display: flex; }
-  .shop-bar input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--ink);
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15px;
-    outline: none;
-    min-width: 0;
-    width: 200px;
-  }
-  .shop-bar input::placeholder { color: rgba(154, 163, 212, 0.55); }
-  .shop-bar .btn { padding: 0; width: 42px; height: 42px; font-size: 20px; display: grid; place-items: center; flex: 0 0 auto; }
-
-  footer {
-    text-align: center;
-    margin-top: 30px;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 9px;
-    letter-spacing: 4px;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    opacity: 0.5;
-  }
-
-  @media (max-width: 480px) {
-    h1 { letter-spacing: 2px; }
-    .shop-toggle { font-size: 10px; padding: 9px 12px; }
-    .panel { padding: 14px; border-radius: 14px; }
-    .stat .num { font-size: 20px; }
-    .item .label { font-size: 16px; }
-    body.shop .item .label { font-size: 17px; }
-  }
-</style>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div class="wrap">
+
+<!-- =================== ONBOARDING =================== -->
+<div id="onboarding" class="overlay" hidden>
+  <div class="slides">
+    <div class="slide" data-step="0">
+      <div class="logo big">G</div>
+      <h2>Welkom bij <span class="grad">GROCEREIS</span></h2>
+      <p>Een neon boodschappen-OS. Plak je lijst, vink af terwijl je shopt, doe het samen.</p>
+    </div>
+    <div class="slide" data-step="1">
+      <div class="emoji">📋</div>
+      <h2>Plak je lijst in één keer</h2>
+      <p>Eén item per regel, of comma-gescheiden. Streepjes, headers en multi-regel haakjes worden netjes herkend.</p>
+    </div>
+    <div class="slide" data-step="2">
+      <div class="emoji">🧊</div>
+      <h2>Slimme supermarkt-volgorde</h2>
+      <p>Items staan op volgorde van de route. Gekoeld &amp; diepvries pakken jullie als laatste — die staan onderaan.</p>
+    </div>
+    <div class="slide" data-step="3">
+      <div class="emoji">👥</div>
+      <h2>Shop met meerdere mensen</h2>
+      <p>Deel een 6-letter code of QR. Iedereen ziet realtime wat er nog moet en wie wat pakt.</p>
+    </div>
+  </div>
+  <div class="dots" id="onbDots"></div>
+  <div class="onb-actions">
+    <button class="btn ghost" id="onbSkip" type="button">Overslaan</button>
+    <button class="btn" id="onbNext" type="button">Volgende</button>
+  </div>
+</div>
+
+<!-- =================== NAME PICKER =================== -->
+<div id="namePicker" class="overlay" hidden>
+  <div class="card">
+    <h2>Hoe heet je?</h2>
+    <p class="hint">Zodat anderen zien wie wat pakt.</p>
+    <input id="nameInput" type="text" placeholder="Bijv. Sam" maxlength="20" autocomplete="off" />
+    <div class="color-row" id="colorRow"></div>
+    <button class="btn" id="nameConfirm" type="button">Verder</button>
+  </div>
+</div>
+
+<!-- =================== JOIN MODAL =================== -->
+<div id="joinModal" class="overlay" hidden>
+  <div class="card">
+    <h2>Doe mee met lijst</h2>
+    <p class="hint">Vul de 6-letter code in die je hebt gekregen.</p>
+    <input id="joinCode" type="text" placeholder="ABC123" maxlength="6" autocomplete="off" autocapitalize="characters" />
+    <div class="row">
+      <button class="btn ghost" id="joinCancel" type="button">Annuleer</button>
+      <button class="btn" id="joinGo" type="button">Verbind</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== IMPORT PREVIEW =================== -->
+<div id="importModal" class="overlay" hidden>
+  <div class="card wide">
+    <h2>Importeer voorbeeld</h2>
+    <p class="hint" id="importSummary"></p>
+    <div id="importList" class="import-list"></div>
+    <div id="importSkipped" class="skipped"></div>
+    <div class="row">
+      <button class="btn ghost" id="importCancel" type="button">Annuleer</button>
+      <button class="btn" id="importConfirm" type="button">Voeg toe</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== MAIN APP =================== -->
+<div class="wrap" id="app" hidden>
 
   <header>
     <div class="brand">
       <div class="logo">G</div>
       <div>
         <h1>GROCEREIS</h1>
-        <div class="sub">neon shopping OS · v1</div>
+        <div class="sub" id="syncStatus">connecting…</div>
       </div>
     </div>
-    <button id="shopToggle" class="shop-toggle" type="button">SHOP MODUS</button>
+    <div class="header-actions">
+      <div class="members-strip" id="membersStrip"></div>
+      <button id="shopToggle" class="shop-toggle" type="button">SHOP</button>
+    </div>
   </header>
+
+  <details class="panel sync-card" id="syncCard">
+    <summary>
+      <span class="dot ok"></span>
+      <span>Samen shoppen · code <b id="codeChip">------</b></span>
+      <span class="chev">⌄</span>
+    </summary>
+    <div class="sync-body">
+      <div class="sync-grid">
+        <div class="qr-box">
+          <canvas id="qrCanvas" width="220" height="220"></canvas>
+          <div class="qr-hint">Scan om mee te doen</div>
+        </div>
+        <div class="sync-info">
+          <div class="code-display" id="codeDisplay">------</div>
+          <button class="btn ghost" id="copyLink" type="button">📎 Kopieer link</button>
+          <button class="btn ghost" id="joinOther" type="button">Doe mee met andere lijst</button>
+          <button class="btn ghost" id="newList" type="button">Start nieuwe lijst</button>
+          <button class="btn danger" id="leaveList" type="button">Verlaat lijst</button>
+        </div>
+      </div>
+    </div>
+  </details>
 
   <section class="panel upload-panel">
     <div class="panel-title">batch upload</div>
@@ -645,272 +161,21 @@
   <footer>powered by neon · 2026</footer>
 </div>
 
+<!-- =================== SHOP BAR =================== -->
 <div class="shop-bar" id="shopBar">
   <input id="shopQuick" type="text" placeholder="snel toevoegen..." />
   <button class="btn" id="shopAdd" aria-label="Voeg toe">+</button>
 </div>
 
-<script>
-/* ------------------------------------------------------------------ */
-/* categorieën — volgorde = volgorde in supermarkt route               */
-/* gekoeld & diepvries categorieën staan onderaan zodat ze als laatste */
-/* in het mandje gaan en zo lang mogelijk koud blijven                 */
-/* ------------------------------------------------------------------ */
-const CATEGORIES = [
-  { id:'fruit', name:'Groente & Fruit', icon:'🥬', temp:'ambient', order:1, keywords:[
-    'appel','peer','banaan','sinaasappel','mandarijn','citroen','limoen','druif','druiven','aardbei','framboos','bessen','bes','kiwi','mango','ananas','perzik','nectarine','pruim','kers','watermeloen','meloen','tomaat','komkommer','paprika','sla','ijsbergsla','andijvie','spinazie','rucola','ui','knoflook','prei','wortel','wortels','courgette','aubergine','broccoli','bloemkool','kool','spruit','spruiten','asperge','asperges','champignon','champignons','paddestoel','aardappel','aardappelen','pompoen','mais','peulvrucht','sperziebonen','snijboon','snijbonen','doperwt','doperwten','radijs','biet','bieten','koolrabi','selderij','peterselie','basilicum','dille','bieslook','munt','koriander','gember','avocado','rabarber','groente','fruit','sinas','citrusvrucht','salade','kruiden','rozemarijn','tijm','salie'
-  ]},
-  { id:'brood', name:'Brood & Bakkerij', icon:'🥖', temp:'ambient', order:2, keywords:[
-    'brood','stokbrood','ciabatta','bagel','bolletjes','croissant','pistolet','beschuit','knackebrod','knäckebröd','cracker','crackers','ontbijtkoek','krentenbol','krentenbrood','volkoren','tarwebrood','witbrood','bruinbrood','broodje','broodjes','muffin','donut','tortilla','wraps','pitabrood','naanbrood'
-  ]},
-  { id:'houdbaar', name:'Houdbare voorraad', icon:'🍝', temp:'ambient', order:3, keywords:[
-    'pasta','spaghetti','penne','macaroni','lasagne','rijst','noedels','noodles','quinoa','couscous','bulgur','meel','bloem','suiker','zout','peper','kruiden','olie','olijfolie','zonnebloemolie','azijn','sojasaus','soja','ketchup','mayonaise','mayo','mosterd','sambal','blik','blikje','tomatenblik','soep','bouillon','honing','jam','pindakaas','hagelslag','chocoladepasta','nutella','muesli','cornflakes','havermout','granola','noten','rozijnen','koffie','thee','cacao','poedersuiker','vanille','gist','bakpoeder','currypasta','kerriepoeder','kaneel','paprikapoeder','ketjap'
-  ]},
-  { id:'snoep', name:'Snoep & Koek', icon:'🍪', temp:'ambient', order:4, keywords:[
-    'koek','koekjes','chocolade','choco','snoep','drop','chips','popcorn','reep','chocoladereep','wafels','stroopwafel','stroopwafels','speculaas','gebak','taart','marsepein','liga','evergreen','tumtum','zoete','snicker','mars','bounty','m&m','toffee'
-  ]},
-  { id:'dranken', name:'Dranken', icon:'🥤', temp:'ambient', order:5, keywords:[
-    'water','spa','cola','fanta','sprite','sap','appelsap','sinaasappelsap','wijn','rode wijn','witte wijn','bier','rose','rum','wodka','whisky','gin','tonic','frisdrank','limonade','ranja','ice tea','icetea','drank','siroop','energy','red bull','prosecco','champagne'
-  ]},
-  { id:'nonfood', name:'Huishouden & Non-food', icon:'🧻', temp:'ambient', order:6, keywords:[
-    'wc papier','toiletpapier','keukenrol','keukenpapier','wasmiddel','wasverzachter','vaatwastabletten','vaatwasmiddel','afwasmiddel','allesreiniger','schoonmaak','spons','vuilniszak','vuilniszakken','luier','luiers','tampon','tampons','maandverband','shampoo','douchegel','zeep','tandpasta','tandenborstel','deodorant','scheermesjes','batterijen','batterij','kattenvoer','hondenvoer','bloemen','plant','plantenvoeding','aluminiumfolie','vershoudfolie','bakpapier','tissues','zakdoekjes'
-  ]},
-  { id:'vleesvis', name:'Vis & Vlees', icon:'🥩', temp:'gekoeld', order:7, keywords:[
-    'vis','zalm','tonijn','kabeljauw','makreel','haring','garnalen','garnaal','mossel','mosselen','paling','sushi','vlees','kip','kipfilet','kippendijen','kippenpoten','rundvlees','varkensvlees','gehakt','biefstuk','schnitzel','worst','ham','salami','spek','bacon','kalkoen','lamsvlees','kotelet','runder','slavink','hamburger','vleeswaren','rookworst','frikandel','kroket','speklap','filet americain','rosbief','chorizo','pancetta'
-  ]},
-  { id:'zuivel', name:'Kaas & Zuivel', icon:'🧀', temp:'gekoeld', order:8, keywords:[
-    'melk','karnemelk','yoghurt','kwark','vla','room','slagroom','crème fraîche','creme fraiche','boter','margarine','kaas','geitenkaas','feta','mozzarella','parmezaan','brie','camembert','ei','eieren','tofu','hummus','tzatziki','smeerkaas','platte kaas','jonge kaas','oude kaas','belegen','roomkaas','cottage cheese','halloumi','melkproduct','zuivel'
-  ]},
-  { id:'diepvries', name:'Diepvries', icon:'❄️', temp:'diepvries', order:9, keywords:[
-    'ijs','ijsje','magnum','cornetto','diepvries','diepvriespizza','pizza','frites','patat','vissticks','kipnuggets','loempia','ijsblokjes','ben & jerry','bevroren','ijstaart','ijscoupe'
-  ]},
-  { id:'overig', name:'Overig', icon:'🛒', temp:'ambient', order:5.5, keywords:[] }
-];
+<!-- =================== ASSIGN POPOVER =================== -->
+<div id="assignPopover" class="popover" hidden>
+  <div class="pop-title">Wie pakt dit?</div>
+  <div id="assignList"></div>
+</div>
 
-const MATCH_ORDER = ['diepvries','vleesvis','zuivel','fruit','brood','dranken','snoep','houdbaar','nonfood','overig'];
+<!-- =================== TOAST HOST =================== -->
+<div id="toastHost" class="toast-host"></div>
 
-function normalize(s){
-  return s.toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g,'')
-    .replace(/[^a-z0-9 &']/g,' ')
-    .replace(/\s+/g,' ').trim();
-}
-
-function parseLine(line){
-  let raw = line.trim();
-  if(!raw) return null;
-  let qty = '';
-  const m = raw.match(/^(\d+\s*(?:x|stuks?|st\.?)?)\s+(.+)/i);
-  if(m){ qty = m[1].replace(/\s+/g,'').toLowerCase(); raw = m[2].trim(); }
-  return { name: raw, qty };
-}
-
-function categorize(name){
-  const n = ' ' + normalize(name) + ' ';
-  for(const id of MATCH_ORDER){
-    const cat = CATEGORIES.find(c=>c.id===id);
-    if(!cat || !cat.keywords.length) continue;
-    for(const kw of cat.keywords){
-      const k = ' ' + normalize(kw) + ' ';
-      if(n.includes(k)) return cat.id;
-    }
-  }
-  return 'overig';
-}
-
-/* ---------- state ---------- */
-const STORAGE_KEY = 'grocereis.v1';
-const MODE_KEY = 'grocereis.shop';
-let items = load();
-let shopMode = localStorage.getItem(MODE_KEY) === '1';
-
-function load(){
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-  catch(e){ return []; }
-}
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
-function uid(){ return Math.random().toString(36).slice(2,10); }
-
-function addItem(name, qty){
-  if(!name) return;
-  const catId = categorize(name);
-  items.push({ id: uid(), name, qty: qty||'', cat: catId, done: false, ts: Date.now() });
-}
-
-/* ---------- shop mode ---------- */
-function applyShopMode(){
-  document.body.classList.toggle('shop', shopMode);
-  document.getElementById('shopToggle').textContent = shopMode ? 'STOP SHOP' : 'SHOP MODUS';
-}
-
-/* ---------- render ---------- */
-const $todo = document.getElementById('todo');
-const $done = document.getElementById('done');
-const $doneSection = document.getElementById('doneSection');
-
-function render(){
-  $todo.innerHTML = '';
-  $done.innerHTML = '';
-
-  const todo = items.filter(i=>!i.done);
-  const done = items.filter(i=>i.done);
-
-  const byCat = {};
-  for(const it of todo) (byCat[it.cat] = byCat[it.cat] || []).push(it);
-
-  const sortedCats = CATEGORIES
-    .filter(c => byCat[c.id] && byCat[c.id].length)
-    .sort((a,b)=>a.order-b.order);
-
-  if(sortedCats.length === 0){
-    $todo.innerHTML = '<div class="empty">geen openstaande boodschappen · tijd voor pizza</div>';
-  }
-
-  for(const cat of sortedCats){
-    const list = byCat[cat.id];
-    const wrap = document.createElement('div');
-    wrap.className = 'cat ' + cat.temp;
-    wrap.innerHTML = `
-      <div class="cat-head">
-        <span class="ico">${cat.icon}</span>
-        <span class="name">${cat.name}</span>
-        ${cat.temp==='gekoeld' ? '<span class="badge gekoeld">gekoeld</span>' : ''}
-        ${cat.temp==='diepvries' ? '<span class="badge diepvries">diepvries</span>' : ''}
-        <span class="count">${list.length}</span>
-      </div>
-      <ul class="items"></ul>`;
-    const ul = wrap.querySelector('ul');
-    for(const it of list) ul.appendChild(itemEl(it, cat));
-    $todo.appendChild(wrap);
-  }
-
-  if(done.length){
-    $doneSection.hidden = false;
-    document.getElementById('doneHeadCount').textContent = done.length;
-    const sortedDone = [...done].sort((a,b)=>{
-      const oa = CATEGORIES.find(c=>c.id===a.cat).order;
-      const ob = CATEGORIES.find(c=>c.id===b.cat).order;
-      if(oa!==ob) return oa-ob;
-      return b.ts-a.ts;
-    });
-    const ul = document.createElement('ul');
-    ul.className = 'items';
-    for(const it of sortedDone){
-      const cat = CATEGORIES.find(c=>c.id===it.cat);
-      ul.appendChild(itemEl(it, cat));
-    }
-    $done.appendChild(ul);
-  } else {
-    $doneSection.hidden = true;
-  }
-
-  document.getElementById('todoCount').textContent = todo.length;
-  document.getElementById('doneCount').textContent = done.length;
-  document.getElementById('totalCount').textContent = items.length;
-  const pct = items.length ? Math.round((done.length / items.length) * 100) : 0;
-  document.getElementById('progressBar').style.width = pct + '%';
-}
-
-function itemEl(it, cat){
-  const li = document.createElement('li');
-  li.className = 'item';
-  li.dataset.id = it.id;
-  const badges = [];
-  if(cat.temp==='gekoeld') badges.push('<span class="badge gekoeld">gekoeld</span>');
-  if(cat.temp==='diepvries') badges.push('<span class="badge diepvries">diepvries</span>');
-  li.innerHTML = `
-    <span class="check"></span>
-    ${it.qty ? `<span class="qty">${escapeHtml(it.qty)}</span>` : ''}
-    <span class="label">${escapeHtml(it.name)}</span>
-    ${badges.join(' ')}
-    <button class="del" type="button" title="verwijder" aria-label="verwijder">✕</button>
-  `;
-  li.addEventListener('click', (e)=>{
-    if(e.target.classList.contains('del')) return;
-    toggle(it.id);
-  });
-  li.querySelector('.del').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    remove(it.id);
-  });
-  return li;
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function toggle(id){
-  const it = items.find(i=>i.id===id);
-  if(!it) return;
-  it.done = !it.done;
-  it.ts = Date.now();
-  save(); render();
-}
-function remove(id){
-  items = items.filter(i=>i.id!==id);
-  save(); render();
-}
-
-/* ---------- events ---------- */
-document.getElementById('shopToggle').addEventListener('click', ()=>{
-  shopMode = !shopMode;
-  localStorage.setItem(MODE_KEY, shopMode ? '1' : '0');
-  applyShopMode();
-  if(shopMode) window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-document.getElementById('addBatch').addEventListener('click', ()=>{
-  const txt = document.getElementById('batch').value;
-  const lines = txt.split(/[\n,;]+/).map(l=>l.trim()).filter(Boolean);
-  for(const line of lines){
-    const parsed = parseLine(line);
-    if(parsed) addItem(parsed.name, parsed.qty);
-  }
-  document.getElementById('batch').value = '';
-  save(); render();
-});
-
-document.getElementById('clearBatch').addEventListener('click', ()=>{
-  document.getElementById('batch').value = '';
-});
-
-function quickAddFrom(inpId){
-  const inp = document.getElementById(inpId);
-  const v = inp.value.trim();
-  if(!v) return;
-  const p = parseLine(v);
-  if(p) addItem(p.name, p.qty);
-  inp.value = '';
-  save(); render();
-  inp.focus();
-}
-document.getElementById('addOne').addEventListener('click', ()=>quickAddFrom('quick'));
-document.getElementById('quick').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); quickAddFrom('quick'); } });
-document.getElementById('shopAdd').addEventListener('click', ()=>quickAddFrom('shopQuick'));
-document.getElementById('shopQuick').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); quickAddFrom('shopQuick'); } });
-
-document.getElementById('uncheckAll').addEventListener('click', ()=>{
-  items.forEach(i=>i.done=false);
-  save(); render();
-});
-document.getElementById('clearDone').addEventListener('click', ()=>{
-  if(!items.some(i=>i.done)) return;
-  if(confirm('Alle afgevinkte items verwijderen?')){
-    items = items.filter(i=>!i.done);
-    save(); render();
-  }
-});
-document.getElementById('clearAll').addEventListener('click', ()=>{
-  if(!items.length) return;
-  if(confirm('Hele lijst wissen?')){
-    items = [];
-    save(); render();
-  }
-});
-
-applyShopMode();
-render();
-</script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>
