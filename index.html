@@ -142,6 +142,34 @@
   </div>
 </div>
 
+<!-- =================== APP SETTINGS =================== -->
+<div id="settingsModal" class="overlay" hidden>
+  <div class="card wide">
+    <h2>🎨 Weergave</h2>
+    <div class="settings-section">
+      <div class="settings-title">Thema</div>
+      <div class="theme-grid" id="themeGrid"></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title">Lettergrootte items</div>
+      <div class="font-size-control">
+        <span class="fs-mini">A</span>
+        <input type="range" id="fsRange" min="13" max="22" step="1" value="16" />
+        <span class="fs-big">A</span>
+      </div>
+      <div class="fs-preview">
+        <span class="fs-preview-item">
+          <span class="qty">2x</span>
+          <span class="fs-preview-name">verse zalmfilet</span>
+        </span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="settingsClose" type="button">Sluit</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== RACE ONBOARDING =================== -->
 <div id="raceOnboarding" class="overlay" hidden>
   <div class="card">
@@ -226,7 +254,7 @@
     <div class="header-actions">
       <div class="members-strip" id="membersStrip"></div>
       <button id="leaderBtn" class="icon-btn" type="button" title="Wedstrijd">🏆</button>
-      <button id="themeBtn" class="icon-btn" type="button" title="Theme">🌙</button>
+      <button id="settingsBtn" class="icon-btn" type="button" title="Weergave">🎨</button>
       <button id="shopToggle" class="shop-toggle" type="button">SHOP</button>
     </div>
   </header>

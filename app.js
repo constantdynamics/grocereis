@@ -247,17 +247,29 @@ const LS = {
   rm(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 
+const THEMES = [
+  { id: 'neon',   name: 'Neon',     desc: 'Synthwave · cyan & magenta', swatch: ['#04041a','#00f0ff','#8a5cff','#ff4dd2'] },
+  { id: 'soft',   name: 'Rustig',   desc: 'Zachte sage & lavendel',     swatch: ['#1a1d24','#88b0c8','#a896c0','#d49a9a'] },
+  { id: 'exotic', name: 'Tropisch', desc: 'Terracotta · teal · mustard', swatch: ['#1f1228','#2a9d8f','#e76f51','#e9c46a'] },
+  { id: 'light',  name: 'Licht',    desc: 'Lichte aurora',              swatch: ['#f7f3ff','#00b4d8','#9d4edd','#f72585'] },
+];
+function migrateTheme(stored){
+  if(stored === 'dark') return 'neon';
+  if(stored === 'light' || stored === 'neon' || stored === 'soft' || stored === 'exotic') return stored;
+  return 'neon';
+}
 const state = {
   list: null,
   me: null,
   members: [],
   items: [],
   shopMode: LS.get('grocereis.shop', false),
-  theme: LS.get('grocereis.theme', 'dark'),
+  theme: migrateTheme(LS.get('grocereis.theme', 'neon')),
+  itemFs: LS.get('grocereis.itemFs', 16),
   channel: null,
   editingId: null,
-  gameState: null,    // mirror of list.game_state
-  raceRunning: false, // visual race animation
+  gameState: null,
+  raceRunning: false,
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -1317,9 +1329,40 @@ function renderRaceAnimated(){
 /* Theme                                                         */
 /* ============================================================ */
 function applyTheme(){
-  document.body.classList.toggle('light', state.theme === 'light');
-  $('themeBtn').textContent = state.theme === 'light' ? '☀️' : '🌙';
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', state.theme === 'light' ? '#f7f3ff' : '#04041a');
+  document.body.dataset.theme = state.theme;
+  document.body.style.setProperty('--item-fs', state.itemFs + 'px');
+  const tc = { neon: '#04041a', soft: '#1a1d24', exotic: '#1f1228', light: '#f7f3ff' };
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', tc[state.theme] || '#04041a');
+}
+
+/* ============ Settings modal ============ */
+function openSettings(){
+  renderThemeGrid();
+  $('fsRange').value = state.itemFs;
+  $('settingsModal').hidden = false;
+}
+function closeSettings(){ $('settingsModal').hidden = true; }
+function renderThemeGrid(){
+  const grid = $('themeGrid');
+  grid.innerHTML = '';
+  for(const t of THEMES){
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'theme-card' + (state.theme === t.id ? ' on' : '');
+    card.dataset.theme = t.id;
+    card.innerHTML = `
+      <div class="theme-swatch">${t.swatch.map(c => `<span style="background:${c}"></span>`).join('')}</div>
+      <div class="theme-name">${escapeHtml(t.name)}</div>
+      <div class="theme-desc">${escapeHtml(t.desc)}</div>
+    `;
+    card.onclick = () => {
+      state.theme = t.id;
+      LS.set('grocereis.theme', t.id);
+      applyTheme();
+      renderThemeGrid();
+    };
+    grid.appendChild(card);
+  }
 }
 
 /* ============================================================ */
@@ -1643,10 +1686,12 @@ function wireEvents(){
     applyShopMode();
     if(state.shopMode) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  $('themeBtn').onclick = () => {
-    state.theme = state.theme === 'light' ? 'dark' : 'light';
-    LS.set('grocereis.theme', state.theme);
-    applyTheme();
+  $('settingsBtn').onclick = openSettings;
+  $('settingsClose').onclick = closeSettings;
+  $('fsRange').oninput = (e) => {
+    state.itemFs = parseInt(e.target.value, 10);
+    LS.set('grocereis.itemFs', state.itemFs);
+    document.body.style.setProperty('--item-fs', state.itemFs + 'px');
   };
   $('leaderBtn').onclick = openLeader;
   $('leaderClose').onclick = closeLeader;
@@ -1830,9 +1875,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v7'){
-      toast('Nieuw in v7: race-onboarding · mini-race tussenstand boven je lijst · race blijft live tot iedereen klaar is', { ttl: 9000 });
-      LS.set('grocereis.version', 'v7');
+    if(lastVer !== 'v9'){
+      toast('Nieuw: vastgepinde mini-race 🐫 · 4 thema\'s 🎨 · lettergrootte instelbaar · product/notitie gesplitst', { ttl: 9500 });
+      LS.set('grocereis.version', 'v9');
     }
   }
 }
