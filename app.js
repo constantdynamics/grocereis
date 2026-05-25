@@ -151,8 +151,15 @@ function cleanItem(raw){
     if(d > 0) str += ')'.repeat(d);
     else str = '('.repeat(-d) + str;
   }
+  // Extract parenthetical text as note: "X (Y)" -> name "X", note "Y"
+  let note = '';
+  str = str.replace(/\s*\(([^)]*)\)\s*/g, (_, inner) => {
+    const t = inner.trim();
+    if(t) note = note ? note + '; ' + t : t;
+    return ' ';
+  }).trim();
   const { qty, name } = parseQty(str);
-  return { original, name, qty, skipped: false };
+  return { original, name, qty, note, skipped: false };
 }
 function splitOnInlineMarkers(line){
   // If a single line contains multiple " <dash> " markers (typical when a
@@ -214,7 +221,8 @@ function smartParse(text){
     const fixed = fuzzyFix(r.name);
     const finalName = fixed || r.name;
     items.push({
-      name: finalName, qty: r.qty, original: r.original,
+      name: finalName, qty: r.qty, note: r.note || '',
+      original: r.original,
       wasCleaned: r.original !== finalName, wasFuzzy: !!fixed
     });
   }
@@ -758,6 +766,7 @@ function showImportPreview(parsed){
         <span class="ico">${cat.icon}</span>
         <span class="name">
           ${escapeHtml(it.name)}${it.qty ? ` <span class="qty">${escapeHtml(it.qty)}</span>` : ''}
+          ${it.note ? `<br><span class="import-note">${escapeHtml(it.note)}</span>` : ''}
           ${wasChanged ? `<br><span class="was">was: ${escapeHtml(it.original)}</span>` : ''}
         </span>
         ${cat.temp !== 'ambient' ? `<span class="badge ${cat.temp}">${cat.temp}</span>` : ''}
@@ -785,9 +794,10 @@ function showImportPreview(parsed){
 /* ============================================================ */
 function openEditModal(it){
   state.editingId = it.id;
-  $('editName').value = it.name || '';
+  const { name: dispName, note: dispNote } = splitNameNote(it);
+  $('editName').value = dispName;
   $('editQty').value = it.qty || '';
-  $('editNote').value = it.note || '';
+  $('editNote').value = dispNote;
   $('editAlt').value = it.alt || '';
   // Render label chips
   const host = $('editLabels');
@@ -1452,11 +1462,29 @@ function renderList(){
   const pct = state.items.length ? Math.round((done.length / state.items.length) * 100) : 0;
   $('progressBar').style.width = pct + '%';
 }
+function splitNameNote(it){
+  // Returns the displayed name (without parenthetical text) and combined note.
+  // If the item already has a separate note field, the name is left alone and
+  // any leftover parens in the name (older items) are still extracted for
+  // display.
+  let name = it.name || '';
+  let note = it.note || '';
+  if(/\([^)]*\)/.test(name)){
+    name = name.replace(/\s*\(([^)]*)\)\s*/g, (_, inner) => {
+      const t = (inner || '').trim();
+      if(t) note = note ? note + '; ' + t : t;
+      return ' ';
+    }).trim().replace(/\s+/g, ' ');
+  }
+  return { name, note };
+}
+
 function itemEl(it, cat){
   const li = document.createElement('li');
   li.className = 'item';
   if(it.claimed_by && state.me && it.claimed_by === state.me.id) li.classList.add('claimed-by-me');
   li.dataset.id = it.id;
+  const { name: displayName, note: displayNote } = splitNameNote(it);
   const claimer = state.members.find(m => m.id === it.claimed_by);
   const doneBy = state.members.find(m => m.id === it.done_by);
   const assignChip = claimer
@@ -1466,7 +1494,6 @@ function itemEl(it, cat){
   if(cat.temp === 'gekoeld') metaParts.push('<span class="badge gekoeld">gekoeld</span>');
   if(cat.temp === 'diepvries') metaParts.push('<span class="badge diepvries">diepvries</span>');
   if(it.labels && it.labels.length) it.labels.forEach(l => metaParts.push(`<span class="mini-label">${escapeHtml(l)}</span>`));
-  if(it.note) metaParts.push(`<span class="mini-note">📝 ${escapeHtml(it.note)}</span>`);
   if(it.alt) metaParts.push(`<span class="mini-alt">${escapeHtml(it.alt)}</span>`);
   if(doneBy && it.done) metaParts.push(`<span class="mini-label" style="color:${doneBy.color};border-color:${doneBy.color};background:rgba(255,255,255,0.05)">door ${escapeHtml(doneBy.name)}</span>`);
   li.innerHTML = `
@@ -1474,8 +1501,9 @@ function itemEl(it, cat){
     <div class="item-body">
       <div class="item-row1">
         ${it.qty ? `<span class="qty">${escapeHtml(it.qty)}</span>` : ''}
-        <span class="label">${escapeHtml(it.name)}</span>
+        <span class="label">${escapeHtml(displayName)}</span>
       </div>
+      ${displayNote ? `<div class="item-note">${escapeHtml(displayNote)}</div>` : ''}
       ${metaParts.length ? `<div class="item-meta">${metaParts.join('')}</div>` : ''}
     </div>
     <div class="item-actions">

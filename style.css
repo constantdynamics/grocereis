@@ -967,6 +967,16 @@ ul.items { touch-action: pan-y; }
   background: rgba(0, 240, 255, 0.08);
 }
 .item-meta .mini-note { font-style: italic; }
+.item-note {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-dim);
+  font-style: italic;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.item-note::before { content: '↳ '; opacity: 0.5; }
+.import-note { font-size: 11px; color: var(--ink-dim); font-style: italic; }
 .item-meta .mini-alt { font-size: 11px; opacity: 0.8; }
 .item-meta .mini-alt::before { content: '↪ '; color: var(--mint); }
 .edit-btn {
