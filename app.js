@@ -425,6 +425,7 @@ async function toggleItem(id){
   render();
   if(newDone) addToHistory(it.name);
   await safeOp({ table: 'items', op: 'update', id, patch });
+  maybeFinishRace();
 }
 async function setClaim(id, memberId){
   const it = state.items.find(i=>i.id===id);
@@ -536,6 +537,7 @@ function handleItemEvent(payload){
   else if(eventType === 'UPDATE'){ const it = state.items.find(i=>i.id===nw.id); if(it) Object.assign(it, nw); }
   else if(eventType === 'DELETE'){ state.items = state.items.filter(i=>i.id !== od.id); }
   cacheState(); render();
+  maybeFinishRace();
 }
 function handleMemberEvent(payload){
   const { eventType, new: nw, old: od } = payload;
@@ -986,9 +988,18 @@ async function confirmVoice(){
 /* Leaderboard                                                   */
 /* ============================================================ */
 function openLeader(){
+  // Race onboarding on first open
+  if(!LS.get('grocereis.race-onboarded')){
+    $('raceOnboarding').hidden = false;
+    return;
+  }
   state.leaderOpen = true;
   $('leaderModal').hidden = false;
   renderLeader();
+}
+function dismissRaceOnboarding(){
+  LS.set('grocereis.race-onboarded', true);
+  $('raceOnboarding').hidden = true;
 }
 function closeLeader(){
   state.leaderOpen = false;
@@ -1072,6 +1083,17 @@ function renderLeader(){
   }
 
   renderHandicapSettings();
+  // Toggle End/Start race buttons based on game phase
+  const racing = state.gameState?.phase === 'racing';
+  const start = $('startRace');
+  const end = $('endRace');
+  if(racing){
+    start.hidden = true;
+    end.hidden = false;
+  } else {
+    start.hidden = false;
+    end.hidden = true;
+  }
 }
 
 function renderHandicapSettings(){
@@ -1238,12 +1260,32 @@ async function runCountdownAndRace(){
   $('leaderModal').hidden = false;
   // First render with all camels at 0%, then animate to actual positions
   renderRaceAnimated();
-  // Clear racing phase after a bit
-  setTimeout(async () => {
-    state.raceRunning = false;
-    if(state.gameState?.phase === 'racing') await setGameState(null);
-    if(state.leaderOpen) renderLeader();
-  }, 4500);
+  // Show the in-page mini race banner too
+  renderMiniRace();
+  // Race stays active — camels update live as items get checked.
+  // It ends only when user clicks "Beëindig" OR all items are done.
+  setTimeout(() => { state.raceRunning = false; }, 2000);
+}
+
+async function endRace(){
+  // Announce winner if there is one
+  if(state.gameState?.phase === 'racing'){
+    const { ranked } = computeRaceData();
+    const winner = ranked[0];
+    if(winner && (winner.count + winner.handicap) > 0){
+      const isMe = state.me && winner.member.id === state.me.id;
+      toast(`🏆 ${isMe ? 'Jij wint' : winner.member.name + ' wint'} met ${winner.count} item${winner.count===1?'':'s'}!`, { ttl: 8000 });
+    }
+  }
+  await setGameState(null);
+  if(state.leaderOpen) renderLeader();
+}
+function maybeFinishRace(){
+  if(state.gameState?.phase !== 'racing') return;
+  if(!state.items.length) return;
+  if(state.items.every(i => i.done)){
+    endRace();
+  }
 }
 function renderRaceAnimated(){
   renderLeader();
@@ -1286,8 +1328,38 @@ function render(){
   renderSync();
   renderList();
   renderHistory();
+  renderMiniRace();
   applyShopMode();
   applyTheme();
+}
+function renderMiniRace(){
+  const section = $('miniRace');
+  const gs = state.gameState;
+  const active = gs && (gs.phase === 'racing' || gs.phase === 'turns');
+  if(!active || !state.members.length){ section.hidden = true; return; }
+  section.hidden = false;
+  const { ranked, total } = computeRaceData();
+  $('miniRemaining').textContent = state.items.filter(i => !i.done).length;
+  const track = $('miniRaceTrack');
+  track.innerHTML = '';
+  ranked.forEach((r, idx) => {
+    const effective = r.count + r.handicap;
+    const pct = Math.min(95, (effective / total) * 95);
+    const isLeader = idx === 0 && effective > 0;
+    const lane = document.createElement('div');
+    lane.className = 'mini-lane';
+    lane.style.setProperty('--lane-color', r.member.color);
+    lane.innerHTML = `
+      <span class="mini-name">${escapeHtml(r.member.name)}</span>
+      <div class="mini-track-bar">
+        <div class="mini-trail" style="width:${pct}%"></div>
+        <span class="mini-camel" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</span>
+        <span class="mini-finish">🏁</span>
+      </div>
+      <span class="mini-count">${r.count}${r.handicap ? '+'+r.handicap : ''}</span>
+    `;
+    track.appendChild(lane);
+  });
 }
 function renderHeader(){
   const strip = $('membersStrip');
@@ -1551,8 +1623,21 @@ function wireEvents(){
   $('leaderBtn').onclick = openLeader;
   $('leaderClose').onclick = closeLeader;
   $('startRace').onclick = startRaceFlow;
+  $('endRace').onclick = endRace;
   $('turnDone').onclick = nextTurn;
   $('turnSkip').onclick = nextTurn;
+  $('raceOnbSkip').onclick = () => { dismissRaceOnboarding(); };
+  $('raceOnbStart').onclick = () => {
+    dismissRaceOnboarding();
+    state.leaderOpen = true;
+    $('leaderModal').hidden = false;
+    renderLeader();
+  };
+  $('miniRaceOpen').onclick = () => { openLeader(); };
+  $('miniRace').addEventListener('click', (e) => {
+    if(e.target.closest('#miniRaceOpen')) return;
+    openLeader();
+  });
 
   $('addBatch').onclick = async () => {
     const txt = $('batch').value;
@@ -1717,9 +1802,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v6'){
-      toast('Nieuw in v6: race countdown + jingle 🎶 · beurt modus · handicap · camels nu de juiste kant op', { ttl: 9000 });
-      LS.set('grocereis.version', 'v6');
+    if(lastVer !== 'v7'){
+      toast('Nieuw in v7: race-onboarding · mini-race tussenstand boven je lijst · race blijft live tot iedereen klaar is', { ttl: 9000 });
+      LS.set('grocereis.version', 'v7');
     }
   }
 }

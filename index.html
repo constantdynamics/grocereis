@@ -142,6 +142,25 @@
   </div>
 </div>
 
+<!-- =================== RACE ONBOARDING =================== -->
+<div id="raceOnboarding" class="overlay" hidden>
+  <div class="card">
+    <h2>🐫 Kamelenrace mode</h2>
+    <p class="hint">Maak van boodschappen doen een wedstrijdje. Wie de meeste items afvinkt wint.</p>
+    <ul class="race-onb-list">
+      <li><span class="ic">🏁</span><div><b>Start race</b><br>5-4-3-2-1-GO! met countdown en jingle</div></li>
+      <li><span class="ic">🐪</span><div><b>Live race-track</b><br>Elke deelnemer heeft een camel die naar de finish loopt elke keer als je iets afvinkt</div></li>
+      <li><span class="ic">🎯</span><div><b>Beurt modus</b><br>Iedereen kiest om beurten 1-5 items voordat het startschot klinkt</div></li>
+      <li><span class="ic">⚖️</span><div><b>Handicap</b><br>Voorsprong (+1 t/m +20 items) of eerste-keuze voor jongere shoppers</div></li>
+      <li><span class="ic">📊</span><div><b>Tussenstand</b><br>Tijdens de race zie je een mini-track boven je lijst</div></li>
+    </ul>
+    <div class="row">
+      <button class="btn ghost" id="raceOnbSkip" type="button">Overslaan</button>
+      <button class="btn" id="raceOnbStart" type="button">Aan de slag</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== LEADERBOARD =================== -->
 <div id="leaderModal" class="overlay" hidden>
   <div class="card wide">
@@ -168,6 +187,7 @@
     </details>
     <div class="row">
       <button class="btn ghost" id="leaderClose" type="button">Sluit</button>
+      <button class="btn danger" id="endRace" type="button" hidden>Beëindig wedstrijd</button>
       <button class="btn" id="startRace" type="button">🏁 Start race</button>
     </div>
   </div>
@@ -255,6 +275,16 @@
     <div class="stat"><div class="label">Totaal</div><div class="num" id="totalCount">0</div></div>
   </div>
   <div class="progress"><span id="progressBar"></span></div>
+
+  <!-- mini race banner (visible while a race is on) -->
+  <section class="mini-race" id="miniRace" hidden>
+    <div class="mini-race-head">
+      <span class="mini-race-title">🏆 <b>Wedstrijd loopt</b></span>
+      <span class="mini-race-remaining">Nog <b id="miniRemaining">0</b></span>
+      <button class="icon-btn small" id="miniRaceOpen" type="button" aria-label="Open">↗</button>
+    </div>
+    <div class="mini-race-track" id="miniRaceTrack"></div>
+  </section>
 
   <div class="layout">
     <section id="todo"></section>
