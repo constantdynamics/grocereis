@@ -112,6 +112,19 @@
   </div>
 </div>
 
+<!-- =================== RECIPE URL MODAL =================== -->
+<div id="recipeModal" class="overlay" hidden>
+  <div class="card">
+    <h2>Importeer recept</h2>
+    <p class="hint">Plak een URL van een recept. De ingrediënten worden opgehaald en als items toegevoegd.</p>
+    <input id="recipeUrl" type="text" placeholder="https://..." autocomplete="off" />
+    <div class="row">
+      <button class="btn ghost" id="recipeCancel" type="button">Annuleer</button>
+      <button class="btn" id="recipeGo" type="button">Haal op</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== VOICE MODAL =================== -->
 <div id="voiceModal" class="overlay" hidden>
   <div class="card">
@@ -188,6 +201,7 @@
     <textarea id="batch" placeholder="Plak je lijstje, één item per regel...&#10;bv:&#10;2x melk&#10;tomaten&#10;diepvriespizza&#10;kipfilet&#10;banaan"></textarea>
     <div class="row">
       <button class="btn" id="addBatch" type="button">Verwerk lijst</button>
+      <button class="btn ghost" id="recipeBtn" type="button">🔗 Recept-URL</button>
       <button class="btn ghost" id="clearBatch" type="button">Wissen</button>
     </div>
     <div class="quick-add">

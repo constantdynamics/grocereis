@@ -1,8 +1,9 @@
 /* ============================================================
-   GROCEREIS — main app module (v3)
+   GROCEREIS — main app module (v4)
    ============================================================ */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import QRCode from 'https://esm.sh/qrcode@1.5.4';
+import Sortable from 'https://esm.sh/sortablejs@1.15.2';
 
 const SUPABASE_URL = 'https://wmdopfocqufsquzvemka.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_0vzeEC0FttISlsEiDaFCnw_N7bjjNym';
@@ -240,6 +241,75 @@ function toast(msg, opts={}){
 }
 
 /* ============================================================ */
+/* Offline queue                                                 */
+/* ============================================================ */
+const QKEY = 'grocereis.queue';
+function isNetworkError(e){
+  const m = String(e?.message ?? e ?? '');
+  return /fetch|network|failed to fetch|timeout|offline|load failed|abort/i.test(m);
+}
+async function execOp(op){
+  const t = supa.from(op.table);
+  switch(op.op){
+    case 'insert':   return await t.insert(op.rows);
+    case 'update':   return await t.update(op.patch).eq('id', op.id);
+    case 'updateIn': return await t.update(op.patch).in('id', op.ids);
+    case 'delete':   return await t.delete().eq('id', op.id);
+    case 'deleteIn': return await t.delete().in('id', op.ids);
+  }
+}
+function queueOp(op){
+  const q = LS.get(QKEY, []);
+  q.push({ ...op, _ts: Date.now() });
+  LS.set(QKEY, q);
+  updateQueueIndicator();
+}
+async function safeOp(op){
+  if(!navigator.onLine){ queueOp(op); return; }
+  try{
+    const r = await execOp(op);
+    if(r?.error) throw r.error;
+    updateQueueIndicator();
+  } catch(e){
+    if(isNetworkError(e)){ queueOp(op); }
+    else { console.error(e); toast('Server-fout: ' + (e.message||e), {kind:'error'}); }
+  }
+}
+async function flushQueue(){
+  let q = LS.get(QKEY, []);
+  while(q.length && navigator.onLine){
+    const op = q[0];
+    try{
+      const r = await execOp(op);
+      if(r?.error) throw r.error;
+      q.shift();
+      LS.set(QKEY, q);
+    } catch(e){
+      if(!isNetworkError(e)){
+        console.warn('Dropping bad queued op', op, e);
+        q.shift(); LS.set(QKEY, q);
+      } else break;
+    }
+  }
+  updateQueueIndicator();
+}
+function updateQueueIndicator(){
+  const n = LS.get(QKEY, []).length;
+  const status = $('syncStatus');
+  const dot = document.querySelector('.sync-card .dot');
+  if(!navigator.onLine){
+    if(status) status.textContent = `offline · ${n} in wachtrij`;
+    if(dot) dot.classList.add('off');
+  } else if(n){
+    if(status) status.textContent = `synct… ${n} acties`;
+    if(dot) dot.classList.add('off');
+  } else {
+    if(status) status.textContent = state.channel ? 'live · sync aan' : 'connecting…';
+    if(dot) dot.classList.toggle('off', !state.channel);
+  }
+}
+
+/* ============================================================ */
 /* Supabase CRUD                                                 */
 /* ============================================================ */
 async function createList(name){
@@ -271,20 +341,38 @@ async function fetchItems(listId){
   if(error) throw error;
   return data || [];
 }
+function uuid(){
+  if(crypto?.randomUUID) return crypto.randomUUID();
+  // fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16);
+  });
+}
 async function insertItems(itemsArr){
   if(!state.list || !itemsArr.length) return;
-  const rows = itemsArr.map(it => ({
+  const now = Date.now();
+  const rows = itemsArr.map((it, idx) => ({
+    id: uuid(),
     list_id: state.list.id,
     name: it.name,
     qty: it.qty || '',
     cat: categorize(it.name),
-    done: false,
+    done: !!it.done,
+    done_by: it.done_by || null,
+    position: now + idx,
     note: it.note || '',
     labels: it.labels || [],
     alt: it.alt || ''
   }));
-  const { error } = await supa.from('items').insert(rows);
-  if(error){ toast('Toevoegen mislukt: '+error.message, {kind:'error'}); throw error; }
+  // optimistic
+  const nowIso = new Date().toISOString();
+  for(const row of rows){
+    if(!state.items.find(i => i.id === row.id)){
+      state.items.push({ ...row, created_at: nowIso, updated_at: nowIso });
+    }
+  }
+  cacheState(); render();
+  await safeOp({ table: 'items', op: 'insert', rows });
 }
 async function toggleItem(id){
   const it = state.items.find(i=>i.id===id);
@@ -293,44 +381,41 @@ async function toggleItem(id){
   const patch = { done: newDone, done_by: newDone ? state.me?.id : null };
   Object.assign(it, patch);
   render();
-  // Track to local history when done
   if(newDone) addToHistory(it.name);
-  const { error } = await supa.from('items').update(patch).eq('id', id);
-  if(error){ toast('Kon niet opslaan', {kind:'error'}); }
+  await safeOp({ table: 'items', op: 'update', id, patch });
 }
 async function setClaim(id, memberId){
   const it = state.items.find(i=>i.id===id);
   if(!it) return;
   it.claimed_by = memberId;
   render();
-  await supa.from('items').update({ claimed_by: memberId }).eq('id', id);
+  await safeOp({ table: 'items', op: 'update', id, patch: { claimed_by: memberId } });
 }
 async function removeItem(id){
   state.items = state.items.filter(i => i.id !== id);
   render();
-  await supa.from('items').delete().eq('id', id);
+  await safeOp({ table: 'items', op: 'delete', id });
 }
 async function bulkUpdate(filter, patch){
   const ids = state.items.filter(filter).map(i=>i.id);
   if(!ids.length) return;
   ids.forEach(id => Object.assign(state.items.find(i=>i.id===id), patch));
   render();
-  await supa.from('items').update(patch).in('id', ids);
+  await safeOp({ table: 'items', op: 'updateIn', ids, patch });
 }
 async function bulkDelete(filter){
   const ids = state.items.filter(filter).map(i=>i.id);
   if(!ids.length) return;
   state.items = state.items.filter(i => !ids.includes(i.id));
   render();
-  await supa.from('items').delete().in('id', ids);
+  await safeOp({ table: 'items', op: 'deleteIn', ids });
 }
 async function updateItem(id, patch){
   const it = state.items.find(i=>i.id===id);
   if(!it) return;
   Object.assign(it, patch);
   render();
-  const { error } = await supa.from('items').update(patch).eq('id', id);
-  if(error){ toast('Opslaan mislukt', {kind:'error'}); }
+  await safeOp({ table: 'items', op: 'update', id, patch });
 }
 async function markMultipleDone(ids){
   if(!ids.length) return;
@@ -339,7 +424,7 @@ async function markMultipleDone(ids){
     if(it){ it.done = true; it.done_by = state.me?.id; addToHistory(it.name); }
   });
   render();
-  await supa.from('items').update({ done: true, done_by: state.me?.id }).in('id', ids);
+  await safeOp({ table: 'items', op: 'updateIn', ids, patch: { done: true, done_by: state.me?.id } });
 }
 
 /* ============================================================ */
@@ -497,19 +582,20 @@ async function ensureListAndMember(){
   toast('Nieuwe lijst aangemaakt · code ' + list.code);
 }
 async function tryResume(code){
+  const cached = loadCache(code);
+  if(cached){
+    state.list = cached.list;
+    state.members = cached.members || [];
+    state.items = cached.items || [];
+    const memberId = LS.get('grocereis.member.' + code);
+    if(memberId) state.me = state.members.find(m => m.id === memberId) || null;
+    $('app').hidden = false;
+    render();
+    if(state.list?.code){ try{ await renderQR(state.list.code); }catch{} }
+  }
   try {
-    const cached = loadCache(code);
-    if(cached){
-      state.list = cached.list;
-      state.members = cached.members || [];
-      state.items = cached.items || [];
-      const memberId = LS.get('grocereis.member.' + code);
-      if(memberId) state.me = state.members.find(m => m.id === memberId) || null;
-      $('app').hidden = false;
-      render();
-    }
     const list = await getListByCode(code);
-    if(!list){ LS.rm('grocereis.lastCode'); return false; }
+    if(!list){ LS.rm('grocereis.lastCode'); return !!cached; }
     state.list = list;
     state.members = await fetchMembers(list.id);
     state.items = await fetchItems(list.id);
@@ -530,9 +616,14 @@ async function tryResume(code){
     await renderQR(list.code);
     return true;
   } catch(e){
+    if(isNetworkError(e) && cached){
+      // We're offline — stay with cached state, will sync when back online
+      toast('Offline — werkt door met cache', { ttl: 3000, kind: 'warn' });
+      return true;
+    }
     console.error(e);
     toast('Kon lijst niet laden: ' + (e.message || e), {kind:'error'});
-    return false;
+    return !!cached;
   }
 }
 async function joinByCode(code){
@@ -821,16 +912,7 @@ async function confirmVoice(){
   });
   closeVoice();
   if(newItems.length){
-    // insert as already-done items
-    const rows = newItems.map(it => ({
-      list_id: state.list.id,
-      name: it.name,
-      qty: '',
-      cat: categorize(it.name),
-      done: true,
-      done_by: state.me?.id
-    }));
-    await supa.from('items').insert(rows);
+    await insertItems(newItems.map(it => ({ ...it, done: true, done_by: state.me?.id })));
     newItems.forEach(it => addToHistory(it.name));
   }
   if(matchedIds.length) await markMultipleDone(matchedIds);
@@ -943,8 +1025,15 @@ function renderList(){
   if(sortedCats.length === 0) $todo.innerHTML = '<div class="empty">geen openstaande boodschappen · tijd voor pizza</div>';
   for(const cat of sortedCats){
     const list = byCat[cat.id];
+    // Sort by manual position (set on drag-reorder or insert), fallback created_at
+    list.sort((a,b) => {
+      const pa = a.position || new Date(a.created_at||0).getTime();
+      const pb = b.position || new Date(b.created_at||0).getTime();
+      return pa - pb;
+    });
     const wrap = document.createElement('div');
     wrap.className = 'cat ' + cat.temp;
+    wrap.dataset.catId = cat.id;
     wrap.innerHTML = `
       <div class="cat-head">
         <span class="ico">${cat.icon}</span>
@@ -953,11 +1042,12 @@ function renderList(){
         ${cat.temp==='diepvries' ? '<span class="badge diepvries">diepvries</span>' : ''}
         <span class="count">${list.length}</span>
       </div>
-      <ul class="items"></ul>`;
+      <ul class="items" data-cat-id="${cat.id}"></ul>`;
     const ul = wrap.querySelector('ul');
     for(const it of list) ul.appendChild(itemEl(it, cat));
     $todo.appendChild(wrap);
   }
+  initSortable();
   if(done.length){
     $('doneSection').hidden = false;
     $('doneHeadCount').textContent = done.length;
@@ -1044,6 +1134,92 @@ function openAssignPopover(anchor, item){
 }
 function closeAssignPopover(){ $('assignPopover').hidden = true; }
 function outsideClose(e){ if(!e.target.closest('#assignPopover')) closeAssignPopover(); }
+
+/* ============================================================ */
+/* Drag-to-reorder (within category)                             */
+/* ============================================================ */
+let sortableInstances = [];
+function initSortable(){
+  sortableInstances.forEach(s => { try{ s.destroy(); }catch(e){} });
+  sortableInstances = [];
+  document.querySelectorAll('#todo ul.items').forEach(ul => {
+    const s = new Sortable(ul, {
+      animation: 180,
+      delay: 280,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 6,
+      ghostClass: 'drag-ghost',
+      chosenClass: 'drag-chosen',
+      dragClass: 'drag-active',
+      forceFallback: true,
+      fallbackTolerance: 5,
+      onEnd: async (evt) => {
+        if(evt.from !== evt.to) return; // shouldn't happen — same list only
+        const catId = ul.dataset.catId;
+        const ids = Array.from(ul.children).map(li => li.dataset.id);
+        await reorderItems(catId, ids);
+      }
+    });
+    sortableInstances.push(s);
+  });
+}
+async function reorderItems(catId, ids){
+  const base = Date.now();
+  const updates = [];
+  ids.forEach((id, idx) => {
+    const it = state.items.find(i => i.id === id);
+    if(it){
+      it.position = base + (idx * 1000);
+      updates.push({ id: it.id, position: it.position });
+    }
+  });
+  cacheState();
+  for(const u of updates){
+    await safeOp({ table: 'items', op: 'update', id: u.id, patch: { position: u.position } });
+  }
+}
+
+/* ============================================================ */
+/* Recipe import via Edge Function                               */
+/* ============================================================ */
+async function importRecipe(url){
+  url = (url||'').trim();
+  if(!/^https?:\/\//i.test(url)){ toast('Vul een geldige URL in', {kind:'warn'}); return; }
+  toast('Recept ophalen…', { ttl: 2500 });
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/recipe-scrape`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'apikey': SUPABASE_KEY,
+      },
+      body: JSON.stringify({ url })
+    });
+    if(!r.ok){
+      let body = '';
+      try{ body = await r.text(); }catch{}
+      toast(`Ophalen mislukt (${r.status})`, {kind:'error'});
+      console.warn('Recipe scrape error:', body);
+      return;
+    }
+    const data = await r.json();
+    if(!data.ingredients?.length){
+      toast('Geen ingrediënten gevonden op deze pagina', {kind:'warn'});
+      return;
+    }
+    const text = data.ingredients.join('\n');
+    const parsed = smartParse(text);
+    if(!parsed.items.length){ toast('Niets bruikbaars', {kind:'warn'}); return; }
+    const final = await showImportPreview(parsed);
+    if(!final) return;
+    await insertItems(final);
+    toast(`${final.length} ingrediënten toegevoegd${data.title ? ' · ' + data.title : ''}`);
+  } catch(e){
+    console.error(e);
+    toast('Recept ophalen mislukt', {kind:'error'});
+  }
+}
 
 /* ============================================================ */
 /* Events                                                        */
@@ -1134,6 +1310,31 @@ function wireEvents(){
   $('voiceCancel').onclick = closeVoice;
   $('voiceConfirm').onclick = confirmVoice;
 
+  // Recipe import
+  const recipeBtn = $('recipeBtn'), recipeModal = $('recipeModal'), recipeUrl = $('recipeUrl');
+  if(recipeBtn){
+    recipeBtn.onclick = async () => {
+      recipeUrl.value = '';
+      // pre-fill from clipboard if it looks like a URL
+      try {
+        const text = await navigator.clipboard.readText();
+        if(/^https?:\/\//i.test((text||'').trim())) recipeUrl.value = text.trim();
+      } catch {}
+      recipeModal.hidden = false;
+      setTimeout(()=>recipeUrl.focus(), 50);
+    };
+    $('recipeCancel').onclick = () => { recipeModal.hidden = true; };
+    $('recipeGo').onclick = async () => {
+      recipeModal.hidden = true;
+      await importRecipe(recipeUrl.value);
+    };
+    recipeUrl.onkeydown = (e) => { if(e.key === 'Enter') $('recipeGo').click(); };
+  }
+
+  // Online/offline + queue
+  window.addEventListener('online', flushQueue);
+  window.addEventListener('offline', updateQueueIndicator);
+
   window.addEventListener('scroll', closeAssignPopover, { passive: true });
   document.addEventListener('visibilitychange', async () => {
     if(document.visibilityState === 'visible' && state.list){
@@ -1161,6 +1362,9 @@ async function init(){
   applyTheme();
   wireEvents();
   registerSW();
+  // Try to flush any leftover queued ops from a previous session
+  if(navigator.onLine) flushQueue();
+  updateQueueIndicator();
   const onboarded = LS.get('grocereis.onboarded');
   const hash = location.hash;
   if(!onboarded && !hash){
@@ -1168,11 +1372,10 @@ async function init(){
     setupOnboarding();
   } else {
     await ensureListAndMember();
-    // Show "what's new" toast for v3 returning users
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v3'){
-      toast('Nieuw in v3: voice 🎤 · wedstrijdmodus 🏆 · labels & notitie · light theme · PWA', { ttl: 8000 });
-      LS.set('grocereis.version', 'v3');
+    if(lastVer !== 'v4'){
+      toast('Nieuw in v4: offline queue · drag-to-reorder · recept-import', { ttl: 8000 });
+      LS.set('grocereis.version', 'v4');
     }
   }
 }

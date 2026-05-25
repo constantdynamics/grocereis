@@ -1,5 +1,5 @@
 /* GROCEREIS service worker — app-shell caching */
-const CACHE = 'grocereis-v3';
+const CACHE = 'grocereis-v4';
 const SHELL = [
   './',
   './index.html',
