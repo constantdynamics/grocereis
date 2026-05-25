@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#04041a" />
 <title>GROCEREIS // neon shopping OS</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="icon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -31,6 +33,16 @@
       <p>Items staan op volgorde van de route. Gekoeld &amp; diepvries pakken jullie als laatste — die staan onderaan.</p>
     </div>
     <div class="slide" data-step="3">
+      <div class="emoji">🎤</div>
+      <h2>Voice in shop modus</h2>
+      <p>Druk de microfoon en zeg wat je net hebt gepakt. We vragen eerst om bevestiging voordat we afstrepen.</p>
+    </div>
+    <div class="slide" data-step="4">
+      <div class="emoji">🏆</div>
+      <h2>Wedstrijdmodus</h2>
+      <p>Tik het bekertje en zie live wie de meeste items in 't mandje heeft gegooid.</p>
+    </div>
+    <div class="slide" data-step="5">
       <div class="emoji">👥</div>
       <h2>Shop met meerdere mensen</h2>
       <p>Deel een 6-letter code of QR. Iedereen ziet realtime wat er nog moet en wie wat pakt.</p>
@@ -81,6 +93,54 @@
   </div>
 </div>
 
+<!-- =================== EDIT ITEM MODAL =================== -->
+<div id="editModal" class="overlay" hidden>
+  <div class="card">
+    <h2>Item aanpassen</h2>
+    <label class="field"><span>Naam</span><input id="editName" type="text" /></label>
+    <label class="field"><span>Hoeveelheid</span><input id="editQty" type="text" placeholder="bv. 2x of 500g" /></label>
+    <label class="field"><span>Notitie</span><input id="editNote" type="text" placeholder="bv. merk X, biologisch" /></label>
+    <label class="field"><span>Alternatief</span><input id="editAlt" type="text" placeholder="als ze dit niet hebben, dan..." /></label>
+    <div>
+      <div class="field-label">Labels</div>
+      <div class="label-chips" id="editLabels"></div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="editCancel" type="button">Annuleer</button>
+      <button class="btn" id="editSave" type="button">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== VOICE MODAL =================== -->
+<div id="voiceModal" class="overlay" hidden>
+  <div class="card">
+    <h2 id="voiceTitle">Wat heb je gepakt?</h2>
+    <div class="voice-indicator">
+      <div class="mic-pulse" id="micPulse">🎤</div>
+      <div class="voice-text" id="voiceTranscript">tap de microfoon en spreek…</div>
+    </div>
+    <p class="hint" id="voiceHint">Bv. "melk, brood, en tomaten"</p>
+    <div id="voiceMatches"></div>
+    <div class="row">
+      <button class="btn ghost" id="voiceCancel" type="button">Annuleer</button>
+      <button class="btn" id="voiceConfirm" type="button" disabled>Bevestig</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== LEADERBOARD =================== -->
+<div id="leaderModal" class="overlay" hidden>
+  <div class="card">
+    <h2>🏆 Wedstrijd</h2>
+    <p class="hint">Wie heeft de meeste items in het mandje gegooid?</p>
+    <div id="leaderList" class="leader-list"></div>
+    <div class="row">
+      <button class="btn" id="leaderClose" type="button">Sluit</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== MAIN APP =================== -->
 <div class="wrap" id="app" hidden>
 
@@ -94,6 +154,8 @@
     </div>
     <div class="header-actions">
       <div class="members-strip" id="membersStrip"></div>
+      <button id="leaderBtn" class="icon-btn" type="button" title="Wedstrijd">🏆</button>
+      <button id="themeBtn" class="icon-btn" type="button" title="Theme">🌙</button>
       <button id="shopToggle" class="shop-toggle" type="button">SHOP</button>
     </div>
   </header>
@@ -132,6 +194,7 @@
       <input id="quick" type="text" placeholder="of voeg snel één item toe..." />
       <button class="btn" id="addOne" type="button" aria-label="Voeg toe">+</button>
     </div>
+    <div id="historyChips" class="history-chips"></div>
   </section>
 
   <div class="stats">
@@ -163,6 +226,7 @@
 
 <!-- =================== SHOP BAR =================== -->
 <div class="shop-bar" id="shopBar">
+  <button class="mic-btn" id="shopMic" type="button" aria-label="Voice" title="Spreek items in">🎤</button>
   <input id="shopQuick" type="text" placeholder="snel toevoegen..." />
   <button class="btn" id="shopAdd" aria-label="Voeg toe">+</button>
 </div>

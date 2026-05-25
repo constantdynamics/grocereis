@@ -1,5 +1,5 @@
 /* ============================================================
-   GROCEREIS — main app module
+   GROCEREIS — main app module (v3)
    ============================================================ */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import QRCode from 'https://esm.sh/qrcode@1.5.4';
@@ -11,7 +11,7 @@ const supa = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 /* ------------------------------------------------------------ */
-/* Categorieën — supermarkt route; gekoeld/diepvries naar einde  */
+/* Categorieën — supermarkt route                                */
 /* ------------------------------------------------------------ */
 const CATEGORIES = [
   { id:'fruit', name:'Groente & Fruit', icon:'🥬', temp:'ambient', order:1, keywords:[
@@ -46,16 +46,17 @@ const CATEGORIES = [
 const CAT_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
 const MATCH_ORDER = ['diepvries','vleesvis','zuivel','fruit','brood','dranken','snoep','houdbaar','nonfood'];
 
+const LABELS = ['biologisch', 'grootverpakking', 'light', 'glutenvrij', 'lactosevrij', 'vegan', 'merk', 'aanbieding'];
+
 /* ============================================================ */
-/* Smart parser                                                  */
+/* Parser & matching                                             */
 /* ============================================================ */
 function normalize(s){
-  return s.toLowerCase()
+  return (s||'').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g,'')
     .replace(/[^a-z0-9 &']/g,' ')
     .replace(/\s+/g,' ').trim();
 }
-
 function categorize(name){
   const n = ' ' + normalize(name) + ' ';
   for(const id of MATCH_ORDER){
@@ -68,33 +69,24 @@ function categorize(name){
   }
   return 'overig';
 }
-
-/* parens-aware helpers */
-function parensBalanced(s){
-  let d=0;
-  for(const c of s){ if(c==='(') d++; else if(c===')') d--; }
-  return d===0;
-}
+function parensBalanced(s){ let d=0; for(const c of s){ if(c==='(') d++; else if(c===')') d--; } return d===0; }
 function splitRespectParens(s){
   const out=[]; let buf=''; let depth=0;
   for(const c of s){
     if(c==='(') depth++;
     else if(c===')') depth=Math.max(0,depth-1);
-    if((c===',' || c===';') && depth===0){
-      if(buf.trim()) out.push(buf.trim()); buf='';
-    } else buf+=c;
+    if((c===',' || c===';') && depth===0){ if(buf.trim()) out.push(buf.trim()); buf=''; }
+    else buf+=c;
   }
   if(buf.trim()) out.push(buf.trim());
   return out;
 }
-
 function isHeaderLine(str){
   const clean = str.replace(/[:\-\s]+$/, '');
   if(/^(boodschappen(lijstje)?|shopping(list)?|grocer(ies|y\s*list)?|lijst(je)?|to\s*do|todo|inkopen|winkel)$/i.test(clean)) return true;
   if(/[:：]\s*$/.test(str) && str.length < 30 && !/\d/.test(str)) return true;
   return false;
 }
-
 function levenshtein(a, b){
   const m=a.length, n=b.length;
   if(!m) return n; if(!n) return m;
@@ -109,23 +101,17 @@ function levenshtein(a, b){
   }
   return prev[n];
 }
-
-/* Build flat keyword dictionary once */
 const ALL_KEYWORDS = [];
 for(const cat of CATEGORIES){
   for(const kw of cat.keywords){
     if(kw.length >= 4 && !kw.includes(' ')) ALL_KEYWORDS.push(kw);
   }
 }
-
 function fuzzyFix(name){
-  // Only try to fix if the item didn't categorize to a real category — i.e. it's "overig"
   if(categorize(name) !== 'overig') return null;
   const lower = normalize(name);
   if(!lower) return null;
-  // already in dictionary? skip
   for(const kw of ALL_KEYWORDS) if(kw === lower) return null;
-  // try first significant word (>= 6 chars to avoid false positives like 'verse')
   const words = lower.split(' ');
   const first = words.find(w => w.length >= 6);
   if(!first) return null;
@@ -136,36 +122,28 @@ function fuzzyFix(name){
     const d = levenshtein(first, kw);
     if(d < bestDist){ bestDist = d; best = kw; }
   }
-  // distance must be <= 30% of word length, capped at 3
   const maxDist = Math.min(3, Math.floor(first.length * 0.3));
   if(best && bestDist > 0 && bestDist <= maxDist){
-    // replace only the matched word, keep capitalization/rest of name
     const re = new RegExp('\\b' + first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
     return name.replace(re, best);
   }
   return null;
 }
-
 function parseQty(str){
   const m = str.match(/^(\d+\s*(?:x|stuks?|st\.?|pak|pakje|pakken|fles|flessen|blik|blikje|liter|l|kg|gram|g|ml)?)\s+(.+)/i);
   if(m) return { qty: m[1].replace(/\s+/g,'').toLowerCase(), name: m[2].trim() };
   return { qty: '', name: str };
 }
-
 function cleanItem(raw){
   let str = raw.trim();
   if(!str) return null;
   const original = str;
-  // strip leading markers
-  str = str.replace(/^[\-•*–—–—]+\s*/u, '').trim();
+  str = str.replace(/^[\-•*–—]+\s*/u, '').trim();
   str = str.replace(/^\d+[.)]\s+/, '').trim();
   str = str.replace(/^\[[ xX]?\]\s*/, '').trim();
   if(!str) return null;
   if(isHeaderLine(str)) return { skipped: true, reason: 'header', original };
-  // strip trailing dangling open paren noise like "(of anders..."
-  // (we already merged multi-line; if still unbalanced, drop closing/opening dangling)
   if(!parensBalanced(str)){
-    // try to close it gracefully
     let d=0;
     for(const c of str){ if(c==='(') d++; else if(c===')') d--; }
     if(d > 0) str += ')'.repeat(d);
@@ -174,48 +152,30 @@ function cleanItem(raw){
   const { qty, name } = parseQty(str);
   return { original, name, qty, skipped: false };
 }
-
 function smartParse(text){
-  const rawLines = text.replace(/\r\n/g, '\n').split('\n');
-  // Step 1: merge multi-line parens
+  const rawLines = (text||'').replace(/\r\n/g, '\n').split('\n');
   const merged = [];
   let buffer = '';
   for(let line of rawLines){
     line = line.trim();
-    if(!line){
-      if(buffer){ merged.push(buffer); buffer = ''; }
-      continue;
-    }
+    if(!line){ if(buffer){ merged.push(buffer); buffer = ''; } continue; }
     buffer = buffer ? buffer + ' ' + line : line;
-    if(parensBalanced(buffer)){
-      merged.push(buffer);
-      buffer = '';
-    }
+    if(parensBalanced(buffer)){ merged.push(buffer); buffer = ''; }
   }
   if(buffer) merged.push(buffer);
-
-  // Step 2: split on commas / semicolons (respecting parens)
   const split = [];
-  for(const line of merged){
-    split.push(...splitRespectParens(line));
-  }
-
-  // Step 3: clean each
+  for(const line of merged) split.push(...splitRespectParens(line));
   const items = [];
   const skipped = [];
   for(const raw of split){
     const r = cleanItem(raw);
     if(!r) continue;
     if(r.skipped){ skipped.push({ original: r.original, reason: r.reason }); continue; }
-    // typo fix on the main word
     const fixed = fuzzyFix(r.name);
     const finalName = fixed || r.name;
     items.push({
-      name: finalName,
-      qty: r.qty,
-      original: r.original,
-      wasCleaned: r.original !== finalName,
-      wasFuzzy: !!fixed
+      name: finalName, qty: r.qty, original: r.original,
+      wasCleaned: r.original !== finalName, wasFuzzy: !!fixed
     });
   }
   return { items, skipped };
@@ -240,12 +200,14 @@ const LS = {
 };
 
 const state = {
-  list: null,            // { id, code, name }
-  me: null,              // current member { id, name, color }
-  members: [],           // all members of the list
-  items: [],             // all items
+  list: null,
+  me: null,
+  members: [],
+  items: [],
   shopMode: LS.get('grocereis.shop', false),
+  theme: LS.get('grocereis.theme', 'dark'),
   channel: null,
+  editingId: null,
 };
 
 /* ============================================================ */
@@ -274,20 +236,18 @@ function toast(msg, opts={}){
     el.appendChild(b);
   }
   host.appendChild(el);
-  const ttl = opts.ttl ?? 4000;
-  setTimeout(()=>el.remove(), ttl);
+  setTimeout(()=>el.remove(), opts.ttl ?? 4000);
 }
 
 /* ============================================================ */
-/* Supabase: list / member / item ops                            */
+/* Supabase CRUD                                                 */
 /* ============================================================ */
 async function createList(name){
-  // generate unique code with retry
   for(let tries=0; tries<8; tries++){
     const code = newCode();
     const { data, error } = await supa.from('lists').insert({ code, name: name || null }).select().single();
     if(!error) return data;
-    if(error.code !== '23505') throw error; // not a unique violation
+    if(error.code !== '23505') throw error;
   }
   throw new Error('Kon geen unieke code genereren');
 }
@@ -311,7 +271,6 @@ async function fetchItems(listId){
   if(error) throw error;
   return data || [];
 }
-
 async function insertItems(itemsArr){
   if(!state.list || !itemsArr.length) return;
   const rows = itemsArr.map(it => ({
@@ -319,24 +278,26 @@ async function insertItems(itemsArr){
     name: it.name,
     qty: it.qty || '',
     cat: categorize(it.name),
-    done: false
+    done: false,
+    note: it.note || '',
+    labels: it.labels || [],
+    alt: it.alt || ''
   }));
   const { error } = await supa.from('items').insert(rows);
   if(error){ toast('Toevoegen mislukt: '+error.message, {kind:'error'}); throw error; }
 }
-
 async function toggleItem(id){
   const it = state.items.find(i=>i.id===id);
   if(!it) return;
   const newDone = !it.done;
   const patch = { done: newDone, done_by: newDone ? state.me?.id : null };
-  // optimistic
   Object.assign(it, patch);
   render();
+  // Track to local history when done
+  if(newDone) addToHistory(it.name);
   const { error } = await supa.from('items').update(patch).eq('id', id);
   if(error){ toast('Kon niet opslaan', {kind:'error'}); }
 }
-
 async function setClaim(id, memberId){
   const it = state.items.find(i=>i.id===id);
   if(!it) return;
@@ -344,13 +305,11 @@ async function setClaim(id, memberId){
   render();
   await supa.from('items').update({ claimed_by: memberId }).eq('id', id);
 }
-
 async function removeItem(id){
   state.items = state.items.filter(i => i.id !== id);
   render();
   await supa.from('items').delete().eq('id', id);
 }
-
 async function bulkUpdate(filter, patch){
   const ids = state.items.filter(filter).map(i=>i.id);
   if(!ids.length) return;
@@ -358,13 +317,56 @@ async function bulkUpdate(filter, patch){
   render();
   await supa.from('items').update(patch).in('id', ids);
 }
-
 async function bulkDelete(filter){
   const ids = state.items.filter(filter).map(i=>i.id);
   if(!ids.length) return;
   state.items = state.items.filter(i => !ids.includes(i.id));
   render();
   await supa.from('items').delete().in('id', ids);
+}
+async function updateItem(id, patch){
+  const it = state.items.find(i=>i.id===id);
+  if(!it) return;
+  Object.assign(it, patch);
+  render();
+  const { error } = await supa.from('items').update(patch).eq('id', id);
+  if(error){ toast('Opslaan mislukt', {kind:'error'}); }
+}
+async function markMultipleDone(ids){
+  if(!ids.length) return;
+  ids.forEach(id => {
+    const it = state.items.find(i=>i.id===id);
+    if(it){ it.done = true; it.done_by = state.me?.id; addToHistory(it.name); }
+  });
+  render();
+  await supa.from('items').update({ done: true, done_by: state.me?.id }).in('id', ids);
+}
+
+/* ============================================================ */
+/* Local history                                                 */
+/* ============================================================ */
+function historyKey(){ return state.list ? 'grocereis.hist.' + state.list.code : null; }
+function addToHistory(name){
+  const k = historyKey(); if(!k) return;
+  const list = LS.get(k, []);
+  const lc = name.trim().toLowerCase();
+  const existing = list.find(h => h.name.toLowerCase() === lc);
+  if(existing){ existing.count = (existing.count||1) + 1; existing.ts = Date.now(); }
+  else list.push({ name: name.trim(), count: 1, ts: Date.now() });
+  LS.set(k, list.slice(-100));
+}
+function readHistory(){
+  const k = historyKey(); if(!k) return [];
+  return LS.get(k, []);
+}
+function computeSuggestions(){
+  const active = new Set(state.items.filter(i => !i.done).map(i => i.name.toLowerCase()));
+  const hist = readHistory();
+  return hist
+    .filter(h => !active.has(h.name.toLowerCase()))
+    .sort((a,b) => (b.count - a.count) || (b.ts - a.ts))
+    .slice(0, 10)
+    .map(h => h.name);
 }
 
 /* ============================================================ */
@@ -374,12 +376,8 @@ function subscribeRealtime(){
   if(state.channel){ supa.removeChannel(state.channel); state.channel = null; }
   if(!state.list) return;
   const ch = supa.channel('list:' + state.list.id);
-  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${state.list.id}` }, payload => {
-    handleItemEvent(payload);
-  });
-  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `list_id=eq.${state.list.id}` }, payload => {
-    handleMemberEvent(payload);
-  });
+  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${state.list.id}` }, payload => handleItemEvent(payload));
+  ch.on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `list_id=eq.${state.list.id}` }, payload => handleMemberEvent(payload));
   ch.subscribe(status => {
     $('syncStatus').textContent = status === 'SUBSCRIBED' ? 'live · sync aan' : 'connecting…';
     const dot = document.querySelector('.sync-card .dot');
@@ -387,56 +385,36 @@ function subscribeRealtime(){
   });
   state.channel = ch;
 }
-
 function handleItemEvent(payload){
   const { eventType, new: nw, old: od } = payload;
-  if(eventType === 'INSERT'){
-    if(!state.items.find(i=>i.id===nw.id)) state.items.push(nw);
-  } else if(eventType === 'UPDATE'){
-    const it = state.items.find(i=>i.id===nw.id);
-    if(it) Object.assign(it, nw);
-  } else if(eventType === 'DELETE'){
-    state.items = state.items.filter(i=>i.id !== od.id);
-  }
-  cacheState();
-  render();
+  if(eventType === 'INSERT'){ if(!state.items.find(i=>i.id===nw.id)) state.items.push(nw); }
+  else if(eventType === 'UPDATE'){ const it = state.items.find(i=>i.id===nw.id); if(it) Object.assign(it, nw); }
+  else if(eventType === 'DELETE'){ state.items = state.items.filter(i=>i.id !== od.id); }
+  cacheState(); render();
 }
 function handleMemberEvent(payload){
   const { eventType, new: nw, old: od } = payload;
-  if(eventType === 'INSERT'){
-    if(!state.members.find(m=>m.id===nw.id)) state.members.push(nw);
-  } else if(eventType === 'UPDATE'){
-    const m = state.members.find(m=>m.id===nw.id);
-    if(m) Object.assign(m, nw);
-  } else if(eventType === 'DELETE'){
-    state.members = state.members.filter(m=>m.id !== od.id);
-  }
-  cacheState();
-  render();
+  if(eventType === 'INSERT'){ if(!state.members.find(m=>m.id===nw.id)) state.members.push(nw); }
+  else if(eventType === 'UPDATE'){ const m = state.members.find(m=>m.id===nw.id); if(m) Object.assign(m, nw); }
+  else if(eventType === 'DELETE'){ state.members = state.members.filter(m=>m.id !== od.id); }
+  cacheState(); render();
 }
 
 /* ============================================================ */
-/* Local cache (for instant render + offline reads)              */
+/* Local cache                                                   */
 /* ============================================================ */
 function cacheState(){
   if(!state.list) return;
-  const k = 'grocereis.cache.' + state.list.code;
-  LS.set(k, { list: state.list, members: state.members, items: state.items });
+  LS.set('grocereis.cache.' + state.list.code, { list: state.list, members: state.members, items: state.items });
 }
-function loadCache(code){
-  return LS.get('grocereis.cache.' + code);
-}
+function loadCache(code){ return LS.get('grocereis.cache.' + code); }
 
 /* ============================================================ */
 /* QR                                                            */
 /* ============================================================ */
 async function renderQR(code){
   const url = location.origin + location.pathname + '#code=' + code;
-  const canvas = $('qrCanvas');
-  await QRCode.toCanvas(canvas, url, {
-    width: 220, margin: 1,
-    color: { dark: '#04041a', light: '#ffffff' }
-  });
+  await QRCode.toCanvas($('qrCanvas'), url, { width: 220, margin: 1, color: { dark: '#04041a', light: '#ffffff' } });
 }
 
 /* ============================================================ */
@@ -446,11 +424,7 @@ function setupOnboarding(){
   const slides = document.querySelectorAll('#onboarding .slide');
   const dotsHost = $('onbDots');
   let step = 0;
-  slides.forEach((_, i) => {
-    const d = document.createElement('span');
-    if(i === 0) d.classList.add('active');
-    dotsHost.appendChild(d);
-  });
+  slides.forEach((_, i) => { const d = document.createElement('span'); if(i===0) d.classList.add('active'); dotsHost.appendChild(d); });
   function show(i){
     slides.forEach(s => s.classList.toggle('active', +s.dataset.step === i));
     dotsHost.querySelectorAll('span').forEach((d, idx) => d.classList.toggle('active', idx === i));
@@ -459,7 +433,7 @@ function setupOnboarding(){
   show(0);
   $('onbNext').onclick = () => {
     if(step < slides.length - 1){ step++; show(step); }
-    else { finishOnboarding(); }
+    else finishOnboarding();
   };
   $('onbSkip').onclick = () => finishOnboarding();
 }
@@ -470,7 +444,7 @@ async function finishOnboarding(){
 }
 
 /* ============================================================ */
-/* Name + color picker                                           */
+/* Name picker                                                   */
 /* ============================================================ */
 function pickAvailableColor(){
   const used = new Set(state.members.map(m => m.color));
@@ -488,14 +462,10 @@ function showNamePicker(){
       const d = document.createElement('span');
       d.className = 'color-dot' + (c === color ? ' selected' : '');
       d.style.background = c;
-      d.onclick = () => {
-        color = c;
-        row.querySelectorAll('.color-dot').forEach(x => x.classList.toggle('selected', x === d));
-      };
+      d.onclick = () => { color = c; row.querySelectorAll('.color-dot').forEach(x => x.classList.toggle('selected', x === d)); };
       row.appendChild(d);
     });
-    const saved = LS.get('grocereis.lastName', '');
-    input.value = saved;
+    input.value = LS.get('grocereis.lastName', '');
     modal.hidden = false;
     setTimeout(()=>input.focus(), 50);
     $('nameConfirm').onclick = () => {
@@ -510,51 +480,39 @@ function showNamePicker(){
 }
 
 /* ============================================================ */
-/* List ensure / join / leave                                    */
+/* List flows                                                    */
 /* ============================================================ */
 async function ensureListAndMember(){
-  // 1) URL hash takes priority
   const hashMatch = location.hash.match(/code=([A-Z0-9]+)/i);
   if(hashMatch){
     history.replaceState(null, '', location.pathname);
     await joinByCode(hashMatch[1]);
     return;
   }
-  // 2) Last used list
   const last = LS.get('grocereis.lastCode');
-  if(last){
-    const ok = await tryResume(last);
-    if(ok) return;
-  }
-  // 3) Brand new list
+  if(last && await tryResume(last)) return;
   const me = await showNamePicker();
   const list = await createList('Lijst van ' + me.name);
   await joinAsMe(list, me);
   toast('Nieuwe lijst aangemaakt · code ' + list.code);
 }
-
 async function tryResume(code){
   try {
     const cached = loadCache(code);
     if(cached){
-      // instant render from cache
       state.list = cached.list;
       state.members = cached.members || [];
       state.items = cached.items || [];
       const memberId = LS.get('grocereis.member.' + code);
-      if(memberId){
-        state.me = state.members.find(m => m.id === memberId) || null;
-      }
+      if(memberId) state.me = state.members.find(m => m.id === memberId) || null;
       $('app').hidden = false;
       render();
     }
-    // refresh from server
     const list = await getListByCode(code);
     if(!list){ LS.rm('grocereis.lastCode'); return false; }
     state.list = list;
     state.members = await fetchMembers(list.id);
     state.items = await fetchItems(list.id);
-
     const memberId = LS.get('grocereis.member.' + code);
     let me = memberId ? state.members.find(m => m.id === memberId) : null;
     if(!me){
@@ -577,7 +535,6 @@ async function tryResume(code){
     return false;
   }
 }
-
 async function joinByCode(code){
   code = code.toUpperCase();
   try {
@@ -594,16 +551,12 @@ async function joinByCode(code){
       me = await addMember(list.id, picked.name, picked.color);
     }
     await joinAsMe(list, me);
-  } catch(e){
-    toast('Verbinden mislukt: ' + (e.message || e), {kind:'error'});
-  }
+  } catch(e){ toast('Verbinden mislukt: ' + (e.message || e), {kind:'error'}); }
 }
-
 async function joinAsMe(list, mePicked){
   state.list = list;
   state.members = await fetchMembers(list.id);
   if(!mePicked.id){
-    // mePicked is { name, color } — insert
     mePicked = await addMember(list.id, mePicked.name, mePicked.color);
     state.members.push(mePicked);
   } else if(!state.members.find(m => m.id === mePicked.id)){
@@ -619,11 +572,9 @@ async function joinAsMe(list, mePicked){
   subscribeRealtime();
   await renderQR(list.code);
 }
-
 async function leaveList(){
   if(!state.list) return;
   if(!confirm('Verlaat deze lijst? Je items blijven bewaard.')) return;
-  // delete this device's member record
   if(state.me) await supa.from('members').delete().eq('id', state.me.id);
   if(state.channel){ supa.removeChannel(state.channel); state.channel = null; }
   LS.rm('grocereis.member.' + state.list.code);
@@ -638,12 +589,9 @@ async function leaveList(){
 /* ============================================================ */
 function showImportPreview(parsed){
   return new Promise(resolve => {
-    const list = $('importList');
-    const skip = $('importSkipped');
-    list.innerHTML = '';
-    skip.innerHTML = '';
+    const list = $('importList'); const skip = $('importSkipped');
+    list.innerHTML = ''; skip.innerHTML = '';
     const enabled = new Array(parsed.items.length).fill(true);
-
     parsed.items.forEach((it, idx) => {
       const cat = CAT_BY_ID[categorize(it.name)];
       const row = document.createElement('div');
@@ -658,32 +606,284 @@ function showImportPreview(parsed){
         </span>
         ${cat.temp !== 'ambient' ? `<span class="badge ${cat.temp}">${cat.temp}</span>` : ''}
       `;
-      row.querySelector('.toggle').onclick = () => {
-        enabled[idx] = !enabled[idx];
-        row.classList.toggle('off', !enabled[idx]);
-      };
+      row.querySelector('.toggle').onclick = () => { enabled[idx] = !enabled[idx]; row.classList.toggle('off', !enabled[idx]); };
       list.appendChild(row);
     });
-
     if(parsed.skipped.length){
       skip.innerHTML = `<b>Overgeslagen (${parsed.skipped.length}):</b> ` +
         parsed.skipped.map(s => `<code>${escapeHtml(s.original)}</code>`).join(', ');
     }
-
     const cleaned = parsed.items.filter(i => i.wasCleaned || i.wasFuzzy).length;
     $('importSummary').innerHTML =
       `${parsed.items.length} items gevonden` +
       (cleaned ? ` · ${cleaned} opgeschoond` : '') +
       (parsed.skipped.length ? ` · ${parsed.skipped.length} overgeslagen` : '');
-
     $('importModal').hidden = false;
     $('importCancel').onclick = () => { $('importModal').hidden = true; resolve(null); };
-    $('importConfirm').onclick = () => {
-      $('importModal').hidden = true;
-      const final = parsed.items.filter((_, i) => enabled[i]);
-      resolve(final);
-    };
+    $('importConfirm').onclick = () => { $('importModal').hidden = true; resolve(parsed.items.filter((_, i) => enabled[i])); };
   });
+}
+
+/* ============================================================ */
+/* Edit modal                                                    */
+/* ============================================================ */
+function openEditModal(it){
+  state.editingId = it.id;
+  $('editName').value = it.name || '';
+  $('editQty').value = it.qty || '';
+  $('editNote').value = it.note || '';
+  $('editAlt').value = it.alt || '';
+  // Render label chips
+  const host = $('editLabels');
+  host.innerHTML = '';
+  const current = new Set(it.labels || []);
+  LABELS.forEach(label => {
+    const chip = document.createElement('span');
+    chip.className = 'label-chip' + (current.has(label) ? ' on' : '');
+    chip.textContent = label;
+    chip.onclick = () => {
+      chip.classList.toggle('on');
+    };
+    host.appendChild(chip);
+  });
+  $('editModal').hidden = false;
+  setTimeout(()=>$('editName').focus(), 50);
+}
+function closeEditModal(){ $('editModal').hidden = true; state.editingId = null; }
+async function saveEdit(){
+  const id = state.editingId; if(!id) return;
+  const labels = Array.from(document.querySelectorAll('#editLabels .label-chip.on')).map(c => c.textContent);
+  const patch = {
+    name: $('editName').value.trim(),
+    qty: $('editQty').value.trim(),
+    note: $('editNote').value.trim(),
+    alt: $('editAlt').value.trim(),
+    labels,
+  };
+  if(!patch.name){ toast('Naam mag niet leeg', {kind:'warn'}); return; }
+  patch.cat = categorize(patch.name);
+  closeEditModal();
+  await updateItem(id, patch);
+}
+
+/* ============================================================ */
+/* Voice (mark items done with confirmation)                     */
+/* ============================================================ */
+let recog = null;
+let voiceMatchedIds = new Set();
+let voiceUnmatchedNames = [];
+
+function voiceSupported(){
+  return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+}
+function openVoice(){
+  if(!voiceSupported()){ toast('Voice werkt niet in deze browser', {kind:'warn'}); return; }
+  voiceMatchedIds = new Set();
+  voiceUnmatchedNames = [];
+  $('voiceTranscript').textContent = 'tik de microfoon en spreek…';
+  $('voiceMatches').innerHTML = '';
+  $('voiceConfirm').disabled = true;
+  $('voiceModal').hidden = false;
+  $('micPulse').classList.remove('listening');
+}
+function closeVoice(){
+  if(recog){ try{ recog.abort(); }catch(e){} recog = null; }
+  $('voiceModal').hidden = true;
+  $('micPulse').classList.remove('listening');
+}
+function startListening(){
+  if(recog){ try{ recog.abort(); }catch(e){} }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recog = new SR();
+  recog.lang = 'nl-NL';
+  recog.continuous = false;
+  recog.interimResults = true;
+  recog.maxAlternatives = 1;
+  let finalText = '';
+  recog.onresult = (e) => {
+    let interim = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      const r = e.results[i];
+      if(r.isFinal) finalText += r[0].transcript + ' ';
+      else interim += r[0].transcript;
+    }
+    $('voiceTranscript').textContent = (finalText + interim).trim() || '…';
+  };
+  recog.onerror = (e) => {
+    $('micPulse').classList.remove('listening');
+    if(e.error === 'no-speech') $('voiceTranscript').textContent = 'niets gehoord — tik nogmaals';
+    else $('voiceTranscript').textContent = 'fout: ' + e.error;
+  };
+  recog.onend = () => {
+    $('micPulse').classList.remove('listening');
+    const txt = finalText.trim();
+    if(txt) processVoiceTranscript(txt);
+  };
+  $('micPulse').classList.add('listening');
+  recog.start();
+}
+function processVoiceTranscript(text){
+  // Strip common Dutch connectives
+  let cleaned = text.toLowerCase();
+  const fillers = ['ik heb','heb','hebben','gepakt','gehaald','gevonden','en','ook','nog','in','mijn','mandje','de','het','een','uhm','euh','ehm','ja','effe','even','daarna','toen','nog','plus'];
+  // Replace connectives with separators
+  const parts = cleaned.split(/[,;.]/).map(p => {
+    let s = p.trim();
+    for(const f of fillers){
+      const re = new RegExp('\\b' + f + '\\b', 'g');
+      s = s.replace(re, ',');
+    }
+    return s;
+  }).flatMap(s => s.split(',')).map(s => s.trim()).filter(s => s.length > 1);
+
+  // Match each spoken token to an undone item
+  const undone = state.items.filter(i => !i.done);
+  const matched = []; // [{ spoken, item }]
+  const unmatched = [];
+  const usedIds = new Set();
+  for(const tok of parts){
+    const norm = normalize(tok);
+    if(!norm) continue;
+    // direct substring
+    let m = undone.find(i => !usedIds.has(i.id) && (normalize(i.name).includes(norm) || norm.includes(normalize(i.name).split(' ')[0])));
+    if(!m){
+      let best=null, bestDist=Infinity;
+      for(const i of undone){
+        if(usedIds.has(i.id)) continue;
+        const itName = normalize(i.name).split(' ')[0];
+        const d = levenshtein(norm.split(' ')[0], itName);
+        if(d < bestDist){ bestDist = d; best = i; }
+      }
+      if(best && bestDist <= Math.max(2, Math.floor(best.name.length * 0.35))) m = best;
+    }
+    if(m){ usedIds.add(m.id); matched.push({ spoken: tok, item: m }); }
+    else unmatched.push(tok);
+  }
+
+  voiceMatchedIds = new Set(matched.map(m => m.item.id));
+  voiceUnmatchedNames = unmatched;
+
+  // Render
+  const host = $('voiceMatches');
+  host.innerHTML = '';
+  if(!matched.length && !unmatched.length){
+    host.innerHTML = '<div class="hint">Niets herkend.</div>';
+    $('voiceConfirm').disabled = true;
+    return;
+  }
+  matched.forEach(({spoken, item}) => {
+    const row = document.createElement('div');
+    row.className = 'voice-match-row';
+    row.innerHTML = `
+      <span class="toggle"></span>
+      <span class="name">${escapeHtml(item.name)}${item.qty ? ` <span class="qty">${escapeHtml(item.qty)}</span>`:''}</span>
+      ${normalize(spoken) !== normalize(item.name) ? `<span class="heard">"${escapeHtml(spoken)}"</span>` : ''}
+    `;
+    row.onclick = () => {
+      row.classList.toggle('off');
+      updateVoiceConfirmState();
+    };
+    host.appendChild(row);
+  });
+  unmatched.forEach(tok => {
+    const row = document.createElement('div');
+    row.className = 'voice-match-row unmatched';
+    row.innerHTML = `
+      <span class="toggle"></span>
+      <span class="name">${escapeHtml(tok)}</span>
+      <span class="heard">niet op lijst — voeg toe &amp; vink af</span>
+    `;
+    row.onclick = () => { row.classList.toggle('off'); updateVoiceConfirmState(); };
+    host.appendChild(row);
+  });
+  updateVoiceConfirmState();
+}
+function updateVoiceConfirmState(){
+  const active = document.querySelectorAll('.voice-match-row:not(.off)').length;
+  $('voiceConfirm').disabled = active === 0;
+}
+
+async function confirmVoice(){
+  const rows = Array.from(document.querySelectorAll('.voice-match-row'));
+  const matchedIds = [];
+  const newItems = [];
+  rows.forEach((row, idx) => {
+    if(row.classList.contains('off')) return;
+    if(row.classList.contains('unmatched')){
+      const name = row.querySelector('.name').textContent.trim();
+      newItems.push({ name });
+    } else {
+      // find corresponding item
+      const nameText = row.querySelector('.name').firstChild.textContent.trim();
+      const it = state.items.find(i => i.name === nameText && !i.done);
+      if(it) matchedIds.push(it.id);
+    }
+  });
+  closeVoice();
+  if(newItems.length){
+    // insert as already-done items
+    const rows = newItems.map(it => ({
+      list_id: state.list.id,
+      name: it.name,
+      qty: '',
+      cat: categorize(it.name),
+      done: true,
+      done_by: state.me?.id
+    }));
+    await supa.from('items').insert(rows);
+    newItems.forEach(it => addToHistory(it.name));
+  }
+  if(matchedIds.length) await markMultipleDone(matchedIds);
+  toast(`✓ ${matchedIds.length + newItems.length} items afgevinkt`);
+}
+
+/* ============================================================ */
+/* Leaderboard                                                   */
+/* ============================================================ */
+function openLeader(){
+  const counts = {};
+  state.items.filter(i => i.done && i.done_by).forEach(i => {
+    counts[i.done_by] = (counts[i.done_by] || 0) + 1;
+  });
+  const ranked = state.members
+    .map(m => ({ member: m, count: counts[m.id] || 0 }))
+    .sort((a, b) => b.count - a.count);
+  const host = $('leaderList');
+  host.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+  const rankClasses = ['gold', 'silver', 'bronze'];
+  ranked.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'leader-row' + (i < 3 && r.count > 0 ? ' ' + rankClasses[i] : '');
+    row.innerHTML = `
+      <span class="leader-rank">${i < 3 && r.count > 0 ? medals[i] : '#' + (i+1)}</span>
+      <span class="avatar" style="background:${r.member.color}">${initials(r.member.name)}</span>
+      <span class="leader-name">${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? '<span class="you">jij</span>' : ''}</span>
+      <span class="leader-count">${r.count}</span>
+    `;
+    host.appendChild(row);
+  });
+  if(!ranked.length || ranked.every(r => r.count === 0)){
+    host.innerHTML = '<div class="hint">Nog niks afgevinkt. Eerste die iets pakt staat bovenaan!</div>';
+  }
+  $('leaderModal').hidden = false;
+}
+
+/* ============================================================ */
+/* Theme                                                         */
+/* ============================================================ */
+function applyTheme(){
+  document.body.classList.toggle('light', state.theme === 'light');
+  $('themeBtn').textContent = state.theme === 'light' ? '☀️' : '🌙';
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', state.theme === 'light' ? '#f7f3ff' : '#04041a');
+}
+
+/* ============================================================ */
+/* Shop mode                                                     */
+/* ============================================================ */
+function applyShopMode(){
+  document.body.classList.toggle('shop', state.shopMode);
+  $('shopToggle').textContent = state.shopMode ? 'STOP' : 'SHOP';
 }
 
 /* ============================================================ */
@@ -693,9 +893,10 @@ function render(){
   renderHeader();
   renderSync();
   renderList();
+  renderHistory();
   applyShopMode();
+  applyTheme();
 }
-
 function renderHeader(){
   const strip = $('membersStrip');
   strip.innerHTML = '';
@@ -708,33 +909,38 @@ function renderHeader(){
     strip.appendChild(a);
   });
 }
-
 function renderSync(){
   if(!state.list) return;
   $('codeChip').textContent = state.list.code;
   $('codeDisplay').textContent = state.list.code;
 }
-
+function renderHistory(){
+  const host = $('historyChips');
+  if(!host) return;
+  host.innerHTML = '';
+  const sug = computeSuggestions();
+  for(const name of sug){
+    const chip = document.createElement('button');
+    chip.className = 'history-chip';
+    chip.type = 'button';
+    chip.textContent = name;
+    chip.onclick = async () => {
+      await insertItems([{ name }]);
+      toast('Toegevoegd: ' + name);
+    };
+    host.appendChild(chip);
+  }
+}
 function renderList(){
   const $todo = $('todo');
   const $done = $('done');
-  $todo.innerHTML = '';
-  $done.innerHTML = '';
-
+  $todo.innerHTML = ''; $done.innerHTML = '';
   const todo = state.items.filter(i => !i.done);
   const done = state.items.filter(i => i.done);
-
   const byCat = {};
   for(const it of todo) (byCat[it.cat] = byCat[it.cat] || []).push(it);
-
-  const sortedCats = CATEGORIES
-    .filter(c => byCat[c.id] && byCat[c.id].length)
-    .sort((a,b) => a.order - b.order);
-
-  if(sortedCats.length === 0){
-    $todo.innerHTML = '<div class="empty">geen openstaande boodschappen · tijd voor pizza</div>';
-  }
-
+  const sortedCats = CATEGORIES.filter(c => byCat[c.id] && byCat[c.id].length).sort((a,b) => a.order - b.order);
+  if(sortedCats.length === 0) $todo.innerHTML = '<div class="empty">geen openstaande boodschappen · tijd voor pizza</div>';
   for(const cat of sortedCats){
     const list = byCat[cat.id];
     const wrap = document.createElement('div');
@@ -752,7 +958,6 @@ function renderList(){
     for(const it of list) ul.appendChild(itemEl(it, cat));
     $todo.appendChild(wrap);
   }
-
   if(done.length){
     $('doneSection').hidden = false;
     $('doneHeadCount').textContent = done.length;
@@ -762,78 +967,67 @@ function renderList(){
       if(oa !== ob) return oa - ob;
       return new Date(b.updated_at) - new Date(a.updated_at);
     });
-    const ul = document.createElement('ul');
-    ul.className = 'items';
+    const ul = document.createElement('ul'); ul.className = 'items';
     for(const it of sortedDone){
       const cat = CAT_BY_ID[it.cat] || CAT_BY_ID.overig;
       ul.appendChild(itemEl(it, cat));
     }
     $done.appendChild(ul);
-  } else {
-    $('doneSection').hidden = true;
-  }
-
+  } else $('doneSection').hidden = true;
   $('todoCount').textContent = todo.length;
   $('doneCount').textContent = done.length;
   $('totalCount').textContent = state.items.length;
   const pct = state.items.length ? Math.round((done.length / state.items.length) * 100) : 0;
   $('progressBar').style.width = pct + '%';
 }
-
 function itemEl(it, cat){
   const li = document.createElement('li');
   li.className = 'item';
   if(it.claimed_by && state.me && it.claimed_by === state.me.id) li.classList.add('claimed-by-me');
   li.dataset.id = it.id;
-
   const badges = [];
   if(cat.temp === 'gekoeld') badges.push('<span class="badge gekoeld">gekoeld</span>');
   if(cat.temp === 'diepvries') badges.push('<span class="badge diepvries">diepvries</span>');
-
   const claimer = state.members.find(m => m.id === it.claimed_by);
   const doneBy = state.members.find(m => m.id === it.done_by);
   const assignChip = claimer
     ? `<button class="assign-chip has-claim" style="background:${claimer.color}" title="Gepakt door ${escapeHtml(claimer.name)}">${initials(claimer.name)}</button>`
     : `<button class="assign-chip" title="Toewijzen">+</button>`;
-
+  const metaParts = [];
+  if(it.labels && it.labels.length) it.labels.forEach(l => metaParts.push(`<span class="mini-label">${escapeHtml(l)}</span>`));
+  if(it.note) metaParts.push(`<span class="mini-note">📝 ${escapeHtml(it.note)}</span>`);
+  if(it.alt) metaParts.push(`<span class="mini-alt">${escapeHtml(it.alt)}</span>`);
+  if(doneBy && it.done) metaParts.push(`<span class="mini-label" style="color:${doneBy.color};border-color:${doneBy.color};background:rgba(255,255,255,0.05)">door ${escapeHtml(doneBy.name)}</span>`);
   li.innerHTML = `
     <span class="check"></span>
     ${it.qty ? `<span class="qty">${escapeHtml(it.qty)}</span>` : ''}
-    <span class="label">${escapeHtml(it.name)}${doneBy && it.done ? ` <span class="qty" style="border-color:${doneBy.color};color:${doneBy.color}">${escapeHtml(doneBy.name)}</span>` : ''}</span>
+    <div class="item-body">
+      <span class="label">${escapeHtml(it.name)}</span>
+      ${metaParts.length ? `<div class="item-meta">${metaParts.join('')}</div>` : ''}
+    </div>
     ${badges.join(' ')}
     ${assignChip}
+    <button class="edit-btn" type="button" title="Aanpassen" aria-label="Aanpassen">✎</button>
     <button class="del" type="button" title="verwijder" aria-label="verwijder">✕</button>
   `;
-
   li.addEventListener('click', (e) => {
-    if(e.target.closest('.del') || e.target.closest('.assign-chip')) return;
+    if(e.target.closest('.del') || e.target.closest('.assign-chip') || e.target.closest('.edit-btn')) return;
     toggleItem(it.id);
   });
-  li.querySelector('.del').addEventListener('click', (e) => {
-    e.stopPropagation();
-    removeItem(it.id);
-  });
-  li.querySelector('.assign-chip').addEventListener('click', (e) => {
-    e.stopPropagation();
-    openAssignPopover(e.currentTarget, it);
-  });
+  li.querySelector('.del').onclick = (e) => { e.stopPropagation(); removeItem(it.id); };
+  li.querySelector('.assign-chip').onclick = (e) => { e.stopPropagation(); openAssignPopover(e.currentTarget, it); };
+  li.querySelector('.edit-btn').onclick = (e) => { e.stopPropagation(); openEditModal(it); };
   return li;
 }
-
-/* ============================================================ */
-/* Assign popover                                                */
-/* ============================================================ */
 function openAssignPopover(anchor, item){
   const pop = $('assignPopover');
   const host = $('assignList');
   host.innerHTML = '';
-
   const noOne = document.createElement('div');
   noOne.className = 'assign-option' + (!item.claimed_by ? ' selected' : '');
   noOne.innerHTML = `<span class="avatar" style="background:rgba(255,255,255,0.1);color:var(--ink)">∅</span><span class="name">Niemand</span>`;
   noOne.onclick = () => { closeAssignPopover(); setClaim(item.id, null); };
   host.appendChild(noOne);
-
   for(const m of state.members){
     const row = document.createElement('div');
     row.className = 'assign-option' + (item.claimed_by === m.id ? ' selected' : '');
@@ -841,28 +1035,18 @@ function openAssignPopover(anchor, item){
     row.onclick = () => { closeAssignPopover(); setClaim(item.id, m.id); };
     host.appendChild(row);
   }
-
   pop.hidden = false;
   const r = anchor.getBoundingClientRect();
   pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
   const leftMax = window.innerWidth - pop.offsetWidth - 10;
   pop.style.left = Math.min(leftMax, Math.max(10, r.right - pop.offsetWidth)) + 'px';
-
   setTimeout(() => document.addEventListener('click', outsideClose, { once: true }), 0);
 }
 function closeAssignPopover(){ $('assignPopover').hidden = true; }
 function outsideClose(e){ if(!e.target.closest('#assignPopover')) closeAssignPopover(); }
 
 /* ============================================================ */
-/* Shop mode                                                     */
-/* ============================================================ */
-function applyShopMode(){
-  document.body.classList.toggle('shop', state.shopMode);
-  $('shopToggle').textContent = state.shopMode ? 'STOP' : 'SHOP';
-}
-
-/* ============================================================ */
-/* Event wiring                                                  */
+/* Events                                                        */
 /* ============================================================ */
 function wireEvents(){
   $('shopToggle').onclick = () => {
@@ -871,24 +1055,26 @@ function wireEvents(){
     applyShopMode();
     if(state.shopMode) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  $('themeBtn').onclick = () => {
+    state.theme = state.theme === 'light' ? 'dark' : 'light';
+    LS.set('grocereis.theme', state.theme);
+    applyTheme();
+  };
+  $('leaderBtn').onclick = openLeader;
+  $('leaderClose').onclick = () => { $('leaderModal').hidden = true; };
 
   $('addBatch').onclick = async () => {
     const txt = $('batch').value;
     if(!txt.trim()) return;
     const parsed = smartParse(txt);
-    if(!parsed.items.length){
-      toast('Niks bruikbaars gevonden', {kind:'warn'});
-      return;
-    }
+    if(!parsed.items.length){ toast('Niks bruikbaars gevonden', {kind:'warn'}); return; }
     const final = await showImportPreview(parsed);
     if(!final) return;
     await insertItems(final);
     $('batch').value = '';
     const cleanCount = final.filter(f => f.wasCleaned || f.wasFuzzy).length;
-    const msg = `${final.length} toegevoegd` + (cleanCount ? ` · ${cleanCount} gecorrigeerd` : '');
-    toast(msg);
+    toast(`${final.length} toegevoegd` + (cleanCount ? ` · ${cleanCount} gecorrigeerd` : ''));
   };
-
   $('clearBatch').onclick = () => { $('batch').value = ''; };
 
   async function quickAddFrom(inpId){
@@ -896,12 +1082,8 @@ function wireEvents(){
     const v = inp.value.trim();
     if(!v) return;
     const parsed = smartParse(v);
-    if(parsed.items.length){
-      await insertItems(parsed.items);
-      inp.value = '';
-    } else {
-      toast('Niks bruikbaars', {kind:'warn'});
-    }
+    if(parsed.items.length){ await insertItems(parsed.items); inp.value = ''; }
+    else toast('Niks bruikbaars', {kind:'warn'});
     inp.focus();
   }
   $('addOne').onclick = () => quickAddFrom('quick');
@@ -910,25 +1092,15 @@ function wireEvents(){
   $('shopQuick').onkeydown = (e) => { if(e.key === 'Enter'){ e.preventDefault(); quickAddFrom('shopQuick'); } };
 
   $('uncheckAll').onclick = () => bulkUpdate(i => i.done, { done: false, done_by: null });
-  $('clearDone').onclick = () => {
-    if(!state.items.some(i => i.done)) return;
-    if(confirm('Alle afgevinkte items verwijderen?')) bulkDelete(i => i.done);
-  };
-  $('clearAll').onclick = () => {
-    if(!state.items.length) return;
-    if(confirm('Hele lijst wissen?')) bulkDelete(() => true);
-  };
+  $('clearDone').onclick = () => { if(!state.items.some(i => i.done)) return; if(confirm('Alle afgevinkte items verwijderen?')) bulkDelete(i => i.done); };
+  $('clearAll').onclick = () => { if(!state.items.length) return; if(confirm('Hele lijst wissen?')) bulkDelete(() => true); };
 
   $('copyLink').onclick = async () => {
     const url = location.origin + location.pathname + '#code=' + state.list.code;
     try { await navigator.clipboard.writeText(url); toast('Link gekopieerd'); }
     catch(e){ toast('Kopiëren mislukt', {kind:'warn'}); }
   };
-  $('joinOther').onclick = () => {
-    $('joinCode').value = '';
-    $('joinModal').hidden = false;
-    setTimeout(() => $('joinCode').focus(), 50);
-  };
+  $('joinOther').onclick = () => { $('joinCode').value = ''; $('joinModal').hidden = false; setTimeout(() => $('joinCode').focus(), 50); };
   $('joinCancel').onclick = () => { $('joinModal').hidden = true; };
   $('joinGo').onclick = async () => {
     const code = $('joinCode').value.trim().toUpperCase();
@@ -950,16 +1122,21 @@ function wireEvents(){
     await joinAsMe(list, me);
     toast('Nieuwe lijst · code ' + list.code);
   };
-
   $('leaveList').onclick = leaveList;
 
-  // close popover on scroll
-  window.addEventListener('scroll', closeAssignPopover, { passive: true });
+  // Edit modal
+  $('editCancel').onclick = closeEditModal;
+  $('editSave').onclick = saveEdit;
 
-  // realtime presence on visibilitychange
+  // Voice
+  $('shopMic').onclick = () => { openVoice(); startListening(); };
+  $('micPulse').onclick = startListening;
+  $('voiceCancel').onclick = closeVoice;
+  $('voiceConfirm').onclick = confirmVoice;
+
+  window.addEventListener('scroll', closeAssignPopover, { passive: true });
   document.addEventListener('visibilitychange', async () => {
     if(document.visibilityState === 'visible' && state.list){
-      // refresh items in case we missed events
       try{
         state.items = await fetchItems(state.list.id);
         state.members = await fetchMembers(state.list.id);
@@ -970,10 +1147,20 @@ function wireEvents(){
 }
 
 /* ============================================================ */
+/* Service worker                                                */
+/* ============================================================ */
+function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW register failed', e));
+}
+
+/* ============================================================ */
 /* Init                                                          */
 /* ============================================================ */
 async function init(){
+  applyTheme();
   wireEvents();
+  registerSW();
   const onboarded = LS.get('grocereis.onboarded');
   const hash = location.hash;
   if(!onboarded && !hash){
@@ -981,10 +1168,13 @@ async function init(){
     setupOnboarding();
   } else {
     await ensureListAndMember();
+    // Show "what's new" toast for v3 returning users
+    const lastVer = LS.get('grocereis.version');
+    if(lastVer !== 'v3'){
+      toast('Nieuw in v3: voice 🎤 · wedstrijdmodus 🏆 · labels & notitie · light theme · PWA', { ttl: 8000 });
+      LS.set('grocereis.version', 'v3');
+    }
   }
 }
 
-init().catch(e => {
-  console.error(e);
-  toast('Startfout: ' + (e.message || e), {kind:'error'});
-});
+init().catch(e => { console.error(e); toast('Startfout: ' + (e.message || e), {kind:'error'}); });
