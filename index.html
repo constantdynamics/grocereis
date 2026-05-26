@@ -147,6 +147,10 @@
   <div class="card wide">
     <h2>🎨 Weergave</h2>
     <div class="settings-section">
+      <div class="settings-title">Modus</div>
+      <label class="switch-row big"><input type="checkbox" id="soloToggle"> <span><b>Eenvoudige modus</b> — geen leden, geen race, geen sync-paneel. Voor solo shoppen.</span></label>
+    </div>
+    <div class="settings-section">
       <div class="settings-title">Thema</div>
       <div class="theme-grid" id="themeGrid"></div>
     </div>
@@ -255,7 +259,14 @@
       <div class="members-strip" id="membersStrip"></div>
       <button id="leaderBtn" class="icon-btn" type="button" title="Wedstrijd">🏆</button>
       <button id="settingsBtn" class="icon-btn" type="button" title="Weergave">🎨</button>
-      <button id="shopToggle" class="shop-toggle" type="button">SHOP</button>
+      <div class="mode-switch" role="tablist" aria-label="Modus">
+        <button class="mode-btn" id="modeList" type="button" data-mode="list" aria-label="Lijst maken">
+          <span class="emoji">📝</span><span class="lbl">Lijst</span>
+        </button>
+        <button class="mode-btn on" id="modeShop" type="button" data-mode="shop" aria-label="Shop">
+          <span class="emoji">🛒</span><span class="lbl">Shop!</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -294,7 +305,13 @@
       <input id="quick" type="text" placeholder="of voeg snel één item toe..." />
       <button class="btn" id="addOne" type="button" aria-label="Voeg toe">+</button>
     </div>
-    <div id="historyChips" class="history-chips"></div>
+    <details class="history-panel" id="historyPanel" hidden>
+      <summary>
+        <span>📜 Eerder gekocht</span>
+        <span class="history-count" id="historyCount">0</span>
+      </summary>
+      <div class="history-content" id="historyContent"></div>
+    </details>
   </section>
 
   <div class="stats">
@@ -326,9 +343,9 @@
   </div>
 
   <div class="row actions-row" style="margin-top: 20px">
-    <button class="btn ghost" id="uncheckAll" type="button">Alles terug</button>
-    <button class="btn danger" id="clearDone" type="button">Mandje leeg</button>
-    <button class="btn danger" id="clearAll" type="button">Wis alles</button>
+    <button class="btn ghost" id="uncheckAll" type="button" title="Verplaats alle items terug naar de te-doen lijst">↶ Alles terug op de lijst</button>
+    <button class="btn danger" id="clearDone" type="button" title="Verwijder de items die je hebt gepakt definitief">🗑️ Gekochte items weg</button>
+    <button class="btn danger" id="clearAll" type="button" title="Wis je hele lijst (afgevinkt + nog te doen)">✕ Hele lijst wissen</button>
   </div>
 
   <footer>powered by neon · 2026</footer>

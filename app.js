@@ -266,10 +266,12 @@ const state = {
   shopMode: LS.get('grocereis.shop', false),
   theme: migrateTheme(LS.get('grocereis.theme', 'neon')),
   itemFs: LS.get('grocereis.itemFs', 16),
+  solo: LS.get('grocereis.solo', true),  // default to solo mode for new users
   channel: null,
   editingId: null,
   gameState: null,
   raceRunning: false,
+  doneTimestamps: {},  // track last done timestamp per member to trigger hop
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -443,9 +445,24 @@ async function toggleItem(id){
   const patch = { done: newDone, done_by: newDone ? state.me?.id : null };
   Object.assign(it, patch);
   render();
-  if(newDone) addToHistory(it.name);
+  if(newDone){
+    addToHistory(it.name);
+    hopCamel(state.me?.id);
+  }
   await safeOp({ table: 'items', op: 'update', id, patch });
   maybeFinishRace();
+}
+function hopCamel(memberId){
+  if(!memberId) return;
+  // Wait one tick so the camel has re-rendered at its new position, then hop
+  requestAnimationFrame(() => {
+    document.querySelectorAll(`.lane-camel[data-member="${memberId}"], .mini-camel[data-member="${memberId}"]`).forEach(el => {
+      el.classList.remove('hopping');
+      void el.offsetWidth;
+      el.classList.add('hopping');
+      setTimeout(() => el.classList.remove('hopping'), 700);
+    });
+  });
 }
 async function setClaim(id, memberId){
   const it = state.items.find(i=>i.id===id);
@@ -553,10 +570,19 @@ function handleListEvent(payload){
 }
 function handleItemEvent(payload){
   const { eventType, new: nw, old: od } = payload;
+  let hopMemberId = null;
   if(eventType === 'INSERT'){ if(!state.items.find(i=>i.id===nw.id)) state.items.push(nw); }
-  else if(eventType === 'UPDATE'){ const it = state.items.find(i=>i.id===nw.id); if(it) Object.assign(it, nw); }
+  else if(eventType === 'UPDATE'){
+    const it = state.items.find(i=>i.id===nw.id);
+    // detect become-done by another member -> hop their camel
+    if(it && !it.done && nw.done && nw.done_by && (!state.me || nw.done_by !== state.me.id)){
+      hopMemberId = nw.done_by;
+    }
+    if(it) Object.assign(it, nw);
+  }
   else if(eventType === 'DELETE'){ state.items = state.items.filter(i=>i.id !== od.id); }
   cacheState(); render();
+  if(hopMemberId) hopCamel(hopMemberId);
   maybeFinishRace();
 }
 function handleMemberEvent(payload){
@@ -1074,7 +1100,7 @@ function renderLeader(){
         </div>
         <div class="lane-track">
           <div class="lane-trail" style="width:${pct}%"></div>
-          <div class="lane-camel" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</div>
+          <div class="lane-camel" data-member="${r.member.id}" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</div>
           <div class="lane-finish">🏁</div>
         </div>
         <div class="lane-count">${r.count}${r.handicap ? `+${r.handicap}` : ''}</div>
@@ -1339,6 +1365,7 @@ function applyTheme(){
 function openSettings(){
   renderThemeGrid();
   $('fsRange').value = state.itemFs;
+  $('soloToggle').checked = !!state.solo;
   $('settingsModal').hidden = false;
 }
 function closeSettings(){ $('settingsModal').hidden = true; }
@@ -1370,7 +1397,11 @@ function renderThemeGrid(){
 /* ============================================================ */
 function applyShopMode(){
   document.body.classList.toggle('shop', state.shopMode);
-  $('shopToggle').textContent = state.shopMode ? 'STOP' : 'SHOP';
+  $('modeList').classList.toggle('on', !state.shopMode);
+  $('modeShop').classList.toggle('on', state.shopMode);
+}
+function applySolo(){
+  document.body.classList.toggle('solo', state.solo);
 }
 
 /* ============================================================ */
@@ -1383,6 +1414,7 @@ function render(){
   renderHistory();
   renderMiniRace();
   applyShopMode();
+  applySolo();
   applyTheme();
 }
 function renderMiniRace(){
@@ -1406,7 +1438,7 @@ function renderMiniRace(){
       <span class="mini-name">${escapeHtml(r.member.name)}</span>
       <div class="mini-track-bar">
         <div class="mini-trail" style="width:${pct}%"></div>
-        <span class="mini-camel" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</span>
+        <span class="mini-camel" data-member="${r.member.id}" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</span>
         <span class="mini-finish">🏁</span>
       </div>
       <span class="mini-count">${r.count}${r.handicap ? '+'+r.handicap : ''}</span>
@@ -1432,20 +1464,50 @@ function renderSync(){
   $('codeDisplay').textContent = state.list.code;
 }
 function renderHistory(){
-  const host = $('historyChips');
-  if(!host) return;
-  host.innerHTML = '';
+  const panel = $('historyPanel');
+  const host = $('historyContent');
+  const count = $('historyCount');
+  if(!panel || !host || !count) return;
   const sug = computeSuggestions();
+  if(!sug.length){ panel.hidden = true; return; }
+  panel.hidden = false;
+  count.textContent = sug.length;
+  // Group by category
+  const groups = {};
   for(const name of sug){
-    const chip = document.createElement('button');
-    chip.className = 'history-chip';
-    chip.type = 'button';
-    chip.textContent = name;
-    chip.onclick = async () => {
-      await insertItems([{ name }]);
-      toast('Toegevoegd: ' + name);
-    };
-    host.appendChild(chip);
+    const catId = categorize(name);
+    (groups[catId] = groups[catId] || []).push(name);
+  }
+  // Sort categories by route order
+  const sortedCatIds = Object.keys(groups).sort((a,b) => {
+    const oa = CAT_BY_ID[a]?.order ?? 99;
+    const ob = CAT_BY_ID[b]?.order ?? 99;
+    return oa - ob;
+  });
+  host.innerHTML = '';
+  for(const catId of sortedCatIds){
+    const cat = CAT_BY_ID[catId] || CAT_BY_ID.overig;
+    const block = document.createElement('div');
+    block.className = 'history-cat';
+    block.innerHTML = `
+      <div class="history-cat-title"><span>${cat.icon}</span> ${escapeHtml(cat.name)}</div>
+      <div class="history-cat-chips"></div>
+    `;
+    const chipsHost = block.querySelector('.history-cat-chips');
+    for(const name of groups[catId]){
+      const chip = document.createElement('button');
+      chip.className = 'history-chip';
+      chip.type = 'button';
+      chip.textContent = name;
+      chip.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await insertItems([{ name }]);
+        toast('Toegevoegd: ' + name);
+      };
+      chipsHost.appendChild(chip);
+    }
+    host.appendChild(block);
   }
 }
 function renderList(){
@@ -1680,11 +1742,18 @@ async function importRecipe(url){
 /* Events                                                        */
 /* ============================================================ */
 function wireEvents(){
-  $('shopToggle').onclick = () => {
-    state.shopMode = !state.shopMode;
+  function setMode(shop){
+    state.shopMode = !!shop;
     LS.set('grocereis.shop', state.shopMode);
     applyShopMode();
     if(state.shopMode) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  $('modeList').onclick = () => setMode(false);
+  $('modeShop').onclick = () => setMode(true);
+  $('soloToggle').onchange = (e) => {
+    state.solo = e.target.checked;
+    LS.set('grocereis.solo', state.solo);
+    applySolo();
   };
   $('settingsBtn').onclick = openSettings;
   $('settingsClose').onclick = closeSettings;
@@ -1875,9 +1944,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v9'){
-      toast('Nieuw: vastgepinde mini-race 🐫 · 4 thema\'s 🎨 · lettergrootte instelbaar · product/notitie gesplitst', { ttl: 9500 });
-      LS.set('grocereis.version', 'v9');
+    if(lastVer !== 'v10'){
+      toast('Nieuw: eenvoudige modus 🛒 · 📝/🛒 mode switch · hopsende camels · historie per categorie · Rustig & Tropisch herontworpen', { ttl: 9500 });
+      LS.set('grocereis.version', 'v10');
     }
   }
 }
