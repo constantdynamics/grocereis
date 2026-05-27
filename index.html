@@ -203,12 +203,37 @@
       <summary>⚙️ Instellingen</summary>
       <div class="settings-body">
         <div class="settings-section">
+          <div class="settings-title">Mijn camel 🐫</div>
+          <div class="my-camel-row">
+            <span class="my-camel-label">Kleur</span>
+            <div class="camel-color-picker" id="camelColorPicker"></div>
+          </div>
+          <div class="my-camel-row">
+            <span class="my-camel-label">Foto op de camel</span>
+            <div class="avatar-control">
+              <div class="avatar-preview" id="avatarPreview"></div>
+              <button class="btn ghost small" id="avatarUpload" type="button">📷 Foto</button>
+              <button class="btn danger small" id="avatarRemove" type="button" hidden>Wis</button>
+              <input type="file" id="avatarFile" accept="image/*" hidden />
+            </div>
+          </div>
+          <label class="switch-row"><input type="checkbox" id="captainToggle"> <span>Ik ben de mandje-houder (vink af voor anderen)</span></label>
+        </div>
+        <div class="settings-section">
           <div class="settings-title">Beurt modus</div>
           <label class="switch-row"><input type="checkbox" id="turnMode"> <span>Iedereen kiest omstebeurt items voordat de race start</span></label>
           <label class="switch-row" id="perTurnRow" hidden>
             <span>Items per beurt: <b id="perTurnVal">3</b></span>
             <input type="range" id="perTurn" min="1" max="5" value="3" />
           </label>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">Foto-bewijs modus</div>
+          <label class="switch-row"><input type="checkbox" id="photoMode"> <span>Producten tellen alleen mét foto van 't product (anti-valsspeel: 15s pauze tussen foto's)</span></label>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">Commentator</div>
+          <label class="switch-row"><input type="checkbox" id="commentatorMode" checked> <span>🎙️ Live race-commentaar tijdens 't shoppen</span></label>
         </div>
         <div class="settings-section">
           <div class="settings-title">Handicap per speler</div>
@@ -243,6 +268,9 @@
 
 <!-- =================== JINGLE =================== -->
 <audio id="jingle" preload="auto" src="jingle.mp3"></audio>
+
+<!-- =================== PHOTO CAPTURE (for photo-proof race) =================== -->
+<input type="file" id="photoCapture" accept="image/*" capture="environment" hidden />
 
 <!-- =================== MAIN APP =================== -->
 <div class="wrap" id="app" hidden>

@@ -247,6 +247,73 @@ const LS = {
   rm(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 
+const CAMEL_COLORS = [
+  '#ffffff', // wit
+  '#fbbf24', // amber
+  '#22c55e', // groen
+  '#ef4444', // rood
+  '#3b82f6', // blauw
+  '#a855f7', // paars
+  '#ec4899', // roze
+  '#06b6d4', // cyaan
+  '#f97316', // oranje
+  '#84cc16', // lime
+];
+
+const COMMENTARY = {
+  newLeader: (n) => [
+    `${n} pakt de leiding!`,
+    `We hebben een nieuwe leider: ${n}!`,
+    `${n} schiet naar de eerste plek!`,
+    `Daar gaat ${n}!`,
+    `${n} neemt het voortouw!`,
+  ],
+  leading: (n, c) => [
+    `${n} ligt op kop met ${c} item${c===1?'':'s'}`,
+    `${n} staat vooraan: ${c} ingepakt`,
+    `${n} blijft koploper met ${c}`,
+    `${n} houdt de leiding vast`,
+    `Op één: ${n} (${c})`,
+  ],
+  remaining: (r) => [
+    `Nog ${r} producten te gaan!`,
+    `${r} items op de lijst...`,
+    `Nog ${r} te pakken!`,
+    `${r} te gaan tot finish`,
+  ],
+  almost: () => [
+    `Bijna klaar! 🏁`,
+    `De finish komt in zicht!`,
+    `Nog ééntje!`,
+    `Zo dichtbij...`,
+  ],
+  halfway: () => [
+    `Halverwege!`,
+    `De helft is binnen 💪`,
+    `Halfway!`,
+  ],
+  tight: () => [
+    `Het wordt spannend!`,
+    `Wat een race! 🔥`,
+    `Heel close...`,
+    `Nek-aan-nek!`,
+  ],
+  catchup: (n) => [
+    `Kom op ${n}, inhalen die boel!`,
+    `${n} heeft 'n inhaalmanoeuvre nodig...`,
+    `${n} bungelt onderaan`,
+  ],
+  step: (n, c) => [
+    `${n} pakt er weer eentje! Nu op ${c}`,
+    `Daar gaat ${n} weer (${c})`,
+    `${n} gooit er eentje in 't mandje`,
+  ],
+};
+
+const commentary = { lastTs: 0, prevLeaderId: null };
+
+function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
 const THEMES = [
   { id: 'neon',   name: 'Neon',     desc: 'Synthwave · cyan & magenta', swatch: ['#04041a','#00f0ff','#8a5cff','#ff4dd2'] },
   { id: 'soft',   name: 'Rustig',   desc: 'Zachte sage & lavendel',     swatch: ['#1a1d24','#88b0c8','#a896c0','#d49a9a'] },
@@ -451,7 +518,110 @@ async function toggleItem(id){
   }
   await safeOp({ table: 'items', op: 'update', id, patch });
   maybeFinishRace();
+  maybeCommentate();
 }
+/* ============================================================ */
+/* Captain & photo-verification item tap                         */
+/* ============================================================ */
+async function handleItemTap(it){
+  if(it.done){
+    // Un-checking: always allowed, no photo / captain detour
+    return toggleItem(it.id);
+  }
+  if(state.me?.is_captain){
+    openCaptainPicker(it);
+    return;
+  }
+  const photoRequired = !!state.list?.game_state?.photoRequired;
+  if(photoRequired){
+    return triggerPhotoCapture(it);
+  }
+  return toggleItem(it.id);
+}
+function openCaptainPicker(item){
+  // Reuse the assign popover styling but assign as done_by + mark done.
+  const pop = $('assignPopover');
+  const host = $('assignList');
+  host.innerHTML = `<div class="pop-title">Wie pakte dit?</div>`;
+  for(const m of state.members){
+    const row = document.createElement('div');
+    row.className = 'assign-option';
+    row.innerHTML = `<span class="avatar" style="background:${m.color}">${initials(m.name)}</span><span class="name">${escapeHtml(m.name)}${state.me && m.id === state.me.id ? ' (jij)' : ''}</span>`;
+    row.onclick = async () => {
+      closeAssignPopover();
+      // Optimistic
+      const it = state.items.find(x => x.id === item.id);
+      if(it){ it.done = true; it.done_by = m.id; addToHistory(it.name); render(); hopCamel(m.id); }
+      await safeOp({ table: 'items', op: 'update', id: item.id, patch: { done: true, done_by: m.id } });
+      maybeFinishRace();
+    };
+    host.appendChild(row);
+  }
+  pop.hidden = false;
+  // Position roughly center top
+  pop.style.top = (window.scrollY + 80) + 'px';
+  pop.style.left = '50%';
+  pop.style.transform = 'translateX(-50%)';
+  setTimeout(() => document.addEventListener('click', outsideClose, { once: true }), 0);
+}
+function triggerPhotoCapture(item){
+  const last = LS.get('grocereis.lastPhotoTs', 0);
+  const elapsed = Date.now() - last;
+  if(elapsed < 15000){
+    const r = Math.ceil((15000 - elapsed) / 1000);
+    toast(`📸 Nog ${r}s pauze tussen foto's (anti-valsspeel)`, { kind: 'warn' });
+    return;
+  }
+  const inp = $('photoCapture');
+  inp.value = '';
+  inp.dataset.itemId = item.id;
+  inp.click();
+}
+
+/* ============================================================ */
+/* Commentator                                                   */
+/* ============================================================ */
+function maybeCommentate(){
+  if(!LS.get('grocereis.commentator', true)) return;
+  if(state.solo) return;
+  if(state.gameState?.phase !== 'racing') return;
+  if(state.members.length < 2) return;
+  const now = Date.now();
+  if(now - commentary.lastTs < 18000) return;
+  const { ranked, total } = computeRaceData();
+  if(!ranked.length || total === 0) return;
+  const leader = ranked[0];
+  const remaining = state.items.filter(i => !i.done).length;
+  let msg = null;
+  // New leader takes priority
+  if(leader.count > 0 && leader.member.id !== commentary.prevLeaderId){
+    if(commentary.prevLeaderId !== null){
+      msg = pickRandom(COMMENTARY.newLeader(leader.member.name));
+    }
+    commentary.prevLeaderId = leader.member.id;
+  } else if(remaining === 1){
+    msg = pickRandom(COMMENTARY.almost());
+  } else if(remaining > 0 && total >= 6 && remaining === Math.floor(total / 2)){
+    msg = pickRandom(COMMENTARY.halfway());
+  } else {
+    const choices = [];
+    if(leader.count > 0) choices.push(pickRandom(COMMENTARY.leading(leader.member.name, leader.count)));
+    if(remaining > 0) choices.push(pickRandom(COMMENTARY.remaining(remaining)));
+    if(ranked.length > 1 && ranked[0].count > 0 && Math.abs(ranked[0].count - ranked[1].count) <= 1){
+      choices.push(pickRandom(COMMENTARY.tight()));
+    }
+    const laggard = ranked[ranked.length - 1];
+    if(laggard && laggard.count === 0 && leader.count >= 3 && Math.random() < 0.4){
+      choices.push(pickRandom(COMMENTARY.catchup(laggard.member.name)));
+    }
+    if(choices.length) msg = pickRandom(choices);
+  }
+  if(msg){
+    toast('🎙️ ' + msg, { kind: 'commentary', ttl: 6000 });
+    commentary.lastTs = now;
+  }
+}
+
 function hopCamel(memberId){
   if(!memberId) return;
   // Wait one tick so the camel has re-rendered at its new position, then hop
@@ -584,6 +754,7 @@ function handleItemEvent(payload){
   cacheState(); render();
   if(hopMemberId) hopCamel(hopMemberId);
   maybeFinishRace();
+  maybeCommentate();
 }
 function handleMemberEvent(payload){
   const { eventType, new: nw, old: od } = payload;
@@ -1092,15 +1263,17 @@ function renderLeader(){
       const isLeader = idx === 0 && effective > 0;
       const lane = document.createElement('div');
       lane.className = 'race-lane' + (isLeader ? ' leader' : '') + (r.handicap > 0 ? ' handicap' : '');
-      lane.style.setProperty('--lane-color', r.member.color);
+      const laneColor = r.member.camel_color || r.member.color;
+      lane.style.setProperty('--lane-color', laneColor);
       lane.style.setProperty('--handicap-pct', startPct + '%');
+      const ridingAvatar = r.member.avatar ? `<img class="camel-rider" src="${r.member.avatar}" alt="">` : '';
       lane.innerHTML = `
         <div class="lane-name" title="${escapeHtml(r.member.name)}">
-          ${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? ' <span class="you">·jij·</span>' : ''}${r.member.pre_pick ? ' <span class="prepick">★</span>' : ''}
+          ${escapeHtml(r.member.name)}${state.me && r.member.id === state.me.id ? ' <span class="you">·jij·</span>' : ''}${r.member.pre_pick ? ' <span class="prepick">★</span>' : ''}${r.member.is_captain ? ' 🧺' : ''}
         </div>
         <div class="lane-track">
           <div class="lane-trail" style="width:${pct}%"></div>
-          <div class="lane-camel" data-member="${r.member.id}" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</div>
+          <div class="lane-camel" data-member="${r.member.id}" style="left:${pct}%; color:${laneColor}">${isLeader ? '🐪' : '🐫'}${ridingAvatar}</div>
           <div class="lane-finish">🏁</div>
         </div>
         <div class="lane-count">${r.count}${r.handicap ? `+${r.handicap}` : ''}</div>
@@ -1145,6 +1318,8 @@ function renderLeader(){
 }
 
 function renderHandicapSettings(){
+  // Mijn camel section (color, avatar, captain)
+  renderMyCamelSection();
   const list = $('handicapList');
   if(!list) return;
   list.innerHTML = '';
@@ -1181,6 +1356,109 @@ function renderHandicapSettings(){
   $('perTurnVal').textContent = $('perTurn').value;
   tm.onchange = () => { pr.hidden = !tm.checked; };
   $('perTurn').oninput = () => { $('perTurnVal').textContent = $('perTurn').value; };
+  // Photo + commentator toggles read from list.game_state defaults
+  const pm = $('photoMode');
+  const cm = $('commentatorMode');
+  if(pm){
+    pm.checked = !!(state.list?.game_state?.photoRequired ?? LS.get('grocereis.photoMode', false));
+    pm.onchange = async () => {
+      LS.set('grocereis.photoMode', pm.checked);
+      const next = { ...(state.list?.game_state || {}), photoRequired: pm.checked };
+      await setGameState(next.phase ? next : (pm.checked ? next : null));
+    };
+  }
+  if(cm){
+    cm.checked = LS.get('grocereis.commentator', true);
+    cm.onchange = () => { LS.set('grocereis.commentator', cm.checked); };
+  }
+}
+
+function renderMyCamelSection(){
+  if(!state.me) return;
+  const picker = $('camelColorPicker');
+  if(picker){
+    picker.innerHTML = '';
+    const mkDot = (color, isDefault) => {
+      const d = document.createElement('span');
+      d.className = 'color-dot' + (isDefault ? ' default-dot' : '') +
+        ((isDefault && !state.me.camel_color) || (!isDefault && state.me.camel_color === color) ? ' selected' : '');
+      if(!isDefault) d.style.background = color;
+      if(isDefault){ d.textContent = '✕'; d.title = 'Standaard (mijn deelnemerskleur)'; }
+      d.onclick = async () => {
+        state.me.camel_color = isDefault ? null : color;
+        picker.querySelectorAll('.color-dot').forEach(x => x.classList.toggle('selected', x === d));
+        await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { camel_color: state.me.camel_color } });
+        render();
+      };
+      picker.appendChild(d);
+    };
+    mkDot(null, true);
+    for(const c of CAMEL_COLORS) mkDot(c, false);
+  }
+  // Avatar preview
+  const preview = $('avatarPreview');
+  const removeBtn = $('avatarRemove');
+  if(preview){
+    if(state.me.avatar){
+      preview.style.backgroundImage = `url('${state.me.avatar}')`;
+      preview.classList.add('has-image');
+      preview.textContent = '';
+      if(removeBtn) removeBtn.hidden = false;
+    } else {
+      preview.style.backgroundImage = '';
+      preview.classList.remove('has-image');
+      preview.textContent = '＋';
+      if(removeBtn) removeBtn.hidden = true;
+    }
+  }
+  // Captain toggle
+  const cap = $('captainToggle');
+  if(cap){
+    cap.checked = !!state.me.is_captain;
+    cap.onchange = async () => {
+      state.me.is_captain = cap.checked;
+      await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { is_captain: cap.checked } });
+    };
+  }
+}
+
+async function resizeImage(file, size = 96){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function setMyAvatar(file){
+  if(!state.me) return;
+  try {
+    const dataUrl = await resizeImage(file, 96);
+    state.me.avatar = dataUrl;
+    await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { avatar: dataUrl } });
+    renderMyCamelSection(); render();
+    toast('Foto opgeslagen');
+  } catch(e){ console.error(e); toast('Foto upload mislukt', {kind:'error'}); }
+}
+async function clearMyAvatar(){
+  if(!state.me) return;
+  state.me.avatar = null;
+  await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { avatar: null } });
+  renderMyCamelSection(); render();
 }
 
 /* ============================================================ */
@@ -1302,17 +1580,18 @@ async function runCountdownAndRace(){
   await sleep(1100);
   ov.hidden = true;
   countdownActive = false;
-  // Open leaderboard with race animation
+  // Don't open the leaderboard modal — go straight to the shopping view
+  // with the sticky mini-race showing the camels animating in.
   state.raceRunning = true;
-  state.leaderOpen = true;
-  $('leaderModal').hidden = false;
-  // First render with all camels at 0%, then animate to actual positions
-  renderRaceAnimated();
-  // Show the in-page mini race banner too
+  closeLeader();
+  // Render mini race + animate camels from 0% to target
   renderMiniRace();
+  animateMiniRaceCamels();
   // Race stays active — camels update live as items get checked.
-  // It ends only when user clicks "Beëindig" OR all items are done.
   setTimeout(() => { state.raceRunning = false; }, 2000);
+  // Reset commentator state for new race
+  commentary.lastTs = 0;
+  commentary.prevLeaderId = null;
 }
 
 async function endRace(){
@@ -1334,6 +1613,19 @@ function maybeFinishRace(){
   if(state.items.every(i => i.done)){
     endRace();
   }
+}
+function animateMiniRaceCamels(){
+  const camels = document.querySelectorAll('.mini-camel');
+  const trails = document.querySelectorAll('.mini-trail');
+  const camelTargets = Array.from(camels).map(c => c.style.left);
+  const trailTargets = Array.from(trails).map(t => t.style.width);
+  camels.forEach(c => { c.style.transition = 'none'; c.style.left = '0%'; });
+  trails.forEach(t => { t.style.transition = 'none'; t.style.width = '0%'; });
+  void document.body.offsetWidth;
+  requestAnimationFrame(() => {
+    camels.forEach((c, i) => { c.style.transition = ''; c.style.left = camelTargets[i]; });
+    trails.forEach((t, i) => { t.style.transition = 'width 1.2s cubic-bezier(.45,.05,.55,1)'; t.style.width = trailTargets[i]; });
+  });
 }
 function renderRaceAnimated(){
   renderLeader();
@@ -1433,12 +1725,14 @@ function renderMiniRace(){
     const isLeader = idx === 0 && effective > 0;
     const lane = document.createElement('div');
     lane.className = 'mini-lane';
-    lane.style.setProperty('--lane-color', r.member.color);
+    const laneColor = r.member.camel_color || r.member.color;
+    lane.style.setProperty('--lane-color', laneColor);
+    const ridingAvatar = r.member.avatar ? `<img class="camel-rider" src="${r.member.avatar}" alt="">` : '';
     lane.innerHTML = `
       <span class="mini-name">${escapeHtml(r.member.name)}</span>
       <div class="mini-track-bar">
         <div class="mini-trail" style="width:${pct}%"></div>
-        <span class="mini-camel" data-member="${r.member.id}" style="left:${pct}%">${isLeader ? '🐪' : '🐫'}</span>
+        <span class="mini-camel" data-member="${r.member.id}" style="left:${pct}%; color:${laneColor}">${isLeader ? '🐪' : '🐫'}${ridingAvatar}</span>
         <span class="mini-finish">🏁</span>
       </div>
       <span class="mini-count">${r.count}${r.handicap ? '+'+r.handicap : ''}</span>
@@ -1619,7 +1913,7 @@ function itemEl(it, cat){
   `;
   li.addEventListener('click', (e) => {
     if(e.target.closest('.del') || e.target.closest('.assign-chip') || e.target.closest('.edit-btn')) return;
-    toggleItem(it.id);
+    handleItemTap(it);
   });
   li.querySelector('.del').onclick = (e) => { e.stopPropagation(); removeItem(it.id); };
   li.querySelector('.assign-chip').onclick = (e) => { e.stopPropagation(); openAssignPopover(e.currentTarget, it); };
@@ -1754,6 +2048,27 @@ function wireEvents(){
     state.solo = e.target.checked;
     LS.set('grocereis.solo', state.solo);
     applySolo();
+  };
+
+  // Avatar upload (camel-rider) — opens hidden file input
+  $('avatarUpload').onclick = () => $('avatarFile').click();
+  $('avatarFile').onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    await setMyAvatar(file);
+    e.target.value = '';
+  };
+  $('avatarRemove').onclick = clearMyAvatar;
+
+  // Photo-verification capture flow
+  $('photoCapture').onchange = async (e) => {
+    const file = e.target.files?.[0];
+    const itemId = e.target.dataset.itemId;
+    e.target.value = '';
+    if(!file || !itemId) return;
+    LS.set('grocereis.lastPhotoTs', Date.now());
+    toast('📸 Foto vastgelegd!');
+    await toggleItem(itemId);
   };
   $('settingsBtn').onclick = openSettings;
   $('settingsClose').onclick = closeSettings;
@@ -1944,9 +2259,9 @@ async function init(){
   } else {
     await ensureListAndMember();
     const lastVer = LS.get('grocereis.version');
-    if(lastVer !== 'v10'){
-      toast('Nieuw: eenvoudige modus 🛒 · 📝/🛒 mode switch · hopsende camels · historie per categorie · Rustig & Tropisch herontworpen', { ttl: 9500 });
-      LS.set('grocereis.version', 'v10');
+    if(lastVer !== 'v11'){
+      toast('Nieuw: camel-kleur + foto · live commentator 🎙️ · foto-bewijs modus 📸 · mandje-houder modus 🧺', { ttl: 9500 });
+      LS.set('grocereis.version', 'v11');
     }
   }
 }

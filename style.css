@@ -1028,6 +1028,20 @@ footer {
 }
 .toast.warn { border-color: var(--warn); box-shadow: 0 0 24px rgba(255, 209, 102, 0.4); }
 .toast.error { border-color: var(--pink); box-shadow: var(--glow-pink); }
+.toast.commentary {
+  border-color: var(--violet);
+  box-shadow: var(--glow-violet);
+  background: linear-gradient(90deg, rgba(138, 92, 255, 0.2), rgba(8, 6, 30, 0.95));
+  font-weight: 600;
+}
+.toast.commentary::before {
+  content: '';
+  display: inline-block;
+  width: 4px; height: 18px;
+  background: linear-gradient(180deg, var(--cyan), var(--pink));
+  margin-right: 8px;
+  border-radius: 2px;
+}
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(-10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1349,6 +1363,24 @@ body.solo .members-strip,
 body.solo #leaderBtn,
 body.solo .mini-race,
 body.solo .turn-banner { display: none !important; }
+.camel-rider {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--lane-color, var(--cyan));
+  object-fit: cover;
+  background: #000;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  z-index: 3;
+}
+.mini-camel .camel-rider {
+  width: 14px; height: 14px;
+  border-width: 1.5px;
+  top: -6px; right: -4px;
+}
 .race-lane.handicap .lane-track::after {
   content: '';
   position: absolute;
@@ -1730,6 +1762,60 @@ body.has-turn-banner .mini-race { top: 70px; }
   border-radius: 999px;
   background: rgba(255, 209, 102, 0.06);
 }
+
+/* ============ CAMEL CUSTOMIZATION ============ */
+.my-camel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+.my-camel-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  min-width: 110px;
+}
+.camel-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.camel-color-picker .color-dot {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all .15s;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+}
+.camel-color-picker .color-dot:hover { transform: scale(1.1); }
+.camel-color-picker .color-dot.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--cyan); }
+.camel-color-picker .color-dot.default-dot { background: linear-gradient(135deg, #fff, #888); }
+.avatar-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.avatar-preview {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 2px dashed rgba(138, 92, 255, 0.4);
+  background-size: cover;
+  background-position: center;
+  display: grid;
+  place-items: center;
+  color: var(--ink-dim);
+  font-size: 18px;
+}
+.avatar-preview.has-image { border-style: solid; border-color: var(--cyan); }
 
 /* ============ RACE SETTINGS ============ */
 .race-settings {
