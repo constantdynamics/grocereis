@@ -1422,34 +1422,148 @@ function renderMyCamelSection(){
   }
 }
 
-async function resizeImage(file, size = 96){
+function readFileAsDataURL(file){
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = size; canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const minDim = Math.min(img.width, img.height);
-        const sx = (img.width - minDim) / 2;
-        const sy = (img.height - minDim) / 2;
-        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
+
+/* Crop UI — circular avatar crop with pan + zoom */
+const crop = { x: 0, y: 0, scale: 1, naturalW: 0, naturalH: 0, minScale: 1, resolve: null };
+const CIRCLE_R = 130; // matches the CSS .crop-circle radius
+function applyCropTransform(){
+  $('cropImg').style.transform = `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px)) scale(${crop.scale})`;
+}
+function clampCropPosition(){
+  const halfW = (crop.naturalW * crop.scale) / 2;
+  const halfH = (crop.naturalH * crop.scale) / 2;
+  const maxX = halfW - CIRCLE_R;
+  const maxY = halfH - CIRCLE_R;
+  if(maxX > 0) crop.x = Math.max(-maxX, Math.min(maxX, crop.x));
+  else crop.x = 0;
+  if(maxY > 0) crop.y = Math.max(-maxY, Math.min(maxY, crop.y));
+  else crop.y = 0;
+}
+function openCropModal(dataUrl){
+  return new Promise((resolve) => {
+    crop.resolve = resolve;
+    const img = $('cropImg');
+    img.onload = () => {
+      crop.naturalW = img.naturalWidth;
+      crop.naturalH = img.naturalHeight;
+      crop.minScale = Math.max((CIRCLE_R * 2) / img.naturalWidth, (CIRCLE_R * 2) / img.naturalHeight);
+      crop.scale = crop.minScale;
+      crop.x = 0; crop.y = 0;
+      const z = $('cropZoom');
+      z.min = crop.minScale.toFixed(3);
+      z.max = (crop.minScale * 4).toFixed(3);
+      z.step = '0.005';
+      z.value = crop.scale.toFixed(3);
+      applyCropTransform();
+    };
+    img.src = dataUrl;
+    $('cropModal').hidden = false;
+  });
+}
+function closeCropModal(result){
+  $('cropModal').hidden = true;
+  if(crop.resolve){ const r = crop.resolve; crop.resolve = null; r(result); }
+}
+function confirmCrop(){
+  // Map the circle (radius CIRCLE_R in stage coords) back to source-image pixels
+  const radiusInImg = CIRCLE_R / crop.scale;
+  const centerXInImg = (crop.naturalW / 2) - (crop.x / crop.scale);
+  const centerYInImg = (crop.naturalH / 2) - (crop.y / crop.scale);
+  const sx = centerXInImg - radiusInImg;
+  const sy = centerYInImg - radiusInImg;
+  const sSize = radiusInImg * 2;
+  const out = document.createElement('canvas');
+  const outSize = 192;
+  out.width = outSize; out.height = outSize;
+  const ctx = out.getContext('2d');
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(outSize/2, outSize/2, outSize/2, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage($('cropImg'), sx, sy, sSize, sSize, 0, 0, outSize, outSize);
+  ctx.restore();
+  closeCropModal(out.toDataURL('image/jpeg', 0.82));
+}
+function wireCropEvents(){
+  const stage = $('cropStage');
+  let dragging = false, lastX = 0, lastY = 0;
+  let pinching = false, pinchStartDist = 0, pinchStartScale = 1;
+  // Pointer drag (mouse + single touch)
+  stage.addEventListener('pointerdown', (e) => {
+    if(pinching) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    try { stage.setPointerCapture(e.pointerId); } catch {}
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if(!dragging || pinching) return;
+    crop.x += e.clientX - lastX;
+    crop.y += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    clampCropPosition();
+    applyCropTransform();
+  });
+  const endDrag = () => { dragging = false; };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+  stage.addEventListener('pointerleave', endDrag);
+  // Pinch (two touches)
+  stage.addEventListener('touchstart', (e) => {
+    if(e.touches.length === 2){
+      pinching = true; dragging = false;
+      const [a, b] = e.touches;
+      pinchStartDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      pinchStartScale = crop.scale;
+    }
+  }, { passive: true });
+  stage.addEventListener('touchmove', (e) => {
+    if(pinching && e.touches.length === 2){
+      e.preventDefault();
+      const [a, b] = e.touches;
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const newScale = pinchStartScale * (d / pinchStartDist);
+      crop.scale = Math.max(crop.minScale, Math.min(crop.minScale * 6, newScale));
+      $('cropZoom').value = crop.scale.toFixed(3);
+      clampCropPosition();
+      applyCropTransform();
+    }
+  }, { passive: false });
+  stage.addEventListener('touchend', (e) => { if(e.touches.length < 2) pinching = false; });
+  // Mouse wheel zoom
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.91;
+    crop.scale = Math.max(crop.minScale, Math.min(crop.minScale * 6, crop.scale * factor));
+    $('cropZoom').value = crop.scale.toFixed(3);
+    clampCropPosition();
+    applyCropTransform();
+  }, { passive: false });
+  // Slider zoom
+  $('cropZoom').oninput = (e) => {
+    crop.scale = parseFloat(e.target.value);
+    clampCropPosition();
+    applyCropTransform();
+  };
+  $('cropCancel').onclick = () => closeCropModal(null);
+  $('cropConfirm').onclick = confirmCrop;
+}
+
 async function setMyAvatar(file){
   if(!state.me) return;
   try {
-    const dataUrl = await resizeImage(file, 96);
-    state.me.avatar = dataUrl;
-    await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { avatar: dataUrl } });
+    const raw = await readFileAsDataURL(file);
+    const cropped = await openCropModal(raw);
+    if(!cropped) return;
+    state.me.avatar = cropped;
+    await safeOp({ table: 'members', op: 'update', id: state.me.id, patch: { avatar: cropped } });
     renderMyCamelSection(); render();
     toast('Foto opgeslagen');
   } catch(e){ console.error(e); toast('Foto upload mislukt', {kind:'error'}); }
@@ -2247,6 +2361,7 @@ function registerSW(){
 async function init(){
   applyTheme();
   wireEvents();
+  wireCropEvents();
   registerSW();
   // Try to flush any leftover queued ops from a previous session
   if(navigator.onLine) flushQueue();
