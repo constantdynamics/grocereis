@@ -793,6 +793,9 @@ function setupOnboarding(){
     slides.forEach(s => s.classList.toggle('active', +s.dataset.step === i));
     dotsHost.querySelectorAll('span').forEach((d, idx) => d.classList.toggle('active', idx === i));
     $('onbNext').textContent = (i === slides.length - 1) ? 'Aan de slag' : 'Volgende';
+    const onRace = slides[i] && slides[i].classList.contains('race-slide');
+    if(onRace) playOnbJingle();
+    else stopOnbJingle();
   }
   show(0);
   $('onbNext').onclick = () => {
@@ -800,8 +803,34 @@ function setupOnboarding(){
     else finishOnboarding();
   };
   $('onbSkip').onclick = () => finishOnboarding();
+  const musicBtn = $('onbMusic');
+  if(musicBtn) musicBtn.onclick = () => {
+    const j = $('jingle');
+    if(j && !j.paused){ stopOnbJingle(); }
+    else { playOnbJingle(); }
+  };
+}
+function playOnbJingle(){
+  const j = $('jingle'); if(!j) return;
+  try { j.currentTime = 0; const p = j.play(); if(p && p.catch) p.catch(()=>{}); } catch(e){}
+  const btn = $('onbMusic');
+  if(btn){
+    btn.classList.add('playing');
+    btn.querySelector('.onb-music-lbl').textContent = 'Race-jingle speelt…';
+  }
+  j.onended = () => {
+    const b = $('onbMusic');
+    if(b){ b.classList.remove('playing'); b.querySelector('.onb-music-lbl').textContent = 'Speel de race-jingle nog eens'; }
+  };
+}
+function stopOnbJingle(){
+  const j = $('jingle');
+  if(j){ try { j.pause(); j.currentTime = 0; } catch(e){} }
+  const btn = $('onbMusic');
+  if(btn){ btn.classList.remove('playing'); btn.querySelector('.onb-music-lbl').textContent = 'Speel de race-jingle'; }
 }
 async function finishOnboarding(){
+  stopOnbJingle();
   $('onboarding').hidden = true;
   LS.set('grocereis.onboarded', true);
   await ensureListAndMember();

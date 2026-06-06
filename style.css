@@ -892,6 +892,98 @@ footer {
 }
 .onb-actions .btn { flex: 1; }
 
+/* ============ ONBOARDING RACE DEMO ============ */
+.onb-race {
+  width: 100%;
+  max-width: 380px;
+  margin: 22px auto 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.onb-lane {
+  position: relative;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.35);
+  border: 1px dashed rgba(138,92,255,0.35);
+  overflow: hidden;
+}
+.onb-trail {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c) 45%, transparent));
+  animation: onbTrail var(--dur, 3.5s) cubic-bezier(.45,.05,.55,1) infinite;
+  animation-play-state: paused;
+}
+.onb-camel {
+  position: absolute;
+  top: 50%; left: 2%;
+  transform: translate(-50%, -50%) scaleX(-1);
+  font-size: 22px;
+  filter: drop-shadow(0 0 8px var(--c));
+  animation: onbRun var(--dur, 3.5s) cubic-bezier(.45,.05,.55,1) infinite,
+             onbGallop .34s ease-in-out infinite;
+  animation-play-state: paused;
+  z-index: 2;
+}
+.onb-finish {
+  position: absolute;
+  right: 5px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 17px;
+  z-index: 1;
+}
+/* trail shares --dur with its camel via the inline style on each */
+.onb-lane:nth-child(1) .onb-trail { --dur: 3.1s; }
+.onb-lane:nth-child(2) .onb-trail { --dur: 3.8s; }
+.onb-lane:nth-child(3) .onb-trail { --dur: 4.4s; }
+.slide.race-slide.active .onb-camel,
+.slide.race-slide.active .onb-trail { animation-play-state: running; }
+@keyframes onbRun {
+  0%   { left: 2%; }
+  78%  { left: 88%; }
+  100% { left: 88%; }
+}
+@keyframes onbTrail {
+  0%   { width: 2%; }
+  78%  { width: 90%; }
+  100% { width: 90%; }
+}
+@keyframes onbGallop {
+  0%, 100% { transform: translate(-50%, -50%) scaleX(-1) rotate(-3deg); }
+  50%      { transform: translate(-50%, calc(-50% - 3px)) scaleX(-1) rotate(3deg); }
+}
+.onb-music {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px auto 0;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(0,240,255,0.08);
+  border: 1px solid rgba(0,240,255,0.4);
+  color: var(--cyan);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+}
+.onb-music:hover { background: rgba(0,240,255,0.16); box-shadow: var(--glow-cyan); }
+.onb-music.playing { animation: onbMusicPulse 1s ease-in-out infinite; }
+.onb-music.playing .onb-music-ic { animation: onbMusicNote .5s ease-in-out infinite alternate; }
+@keyframes onbMusicPulse {
+  0%, 100% { border-color: rgba(0,240,255,0.4); }
+  50%      { border-color: rgba(0,240,255,0.9); box-shadow: var(--glow-cyan); }
+}
+@keyframes onbMusicNote {
+  from { transform: scale(1); }
+  to   { transform: scale(1.25); }
+}
+
 /* ============ COLOR PICKER ============ */
 .color-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .color-dot {
