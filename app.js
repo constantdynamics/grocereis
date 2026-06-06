@@ -833,7 +833,14 @@ async function finishOnboarding(){
   stopOnbJingle();
   $('onboarding').hidden = true;
   LS.set('grocereis.onboarded', true);
+  if(state.list) return; // replay while already in the app — keep current list
   await ensureListAndMember();
+}
+function replayTutorial(){
+  closeSettings();
+  $('onbDots').innerHTML = ''; // setupOnboarding re-appends, avoid duplicate dots
+  $('onboarding').hidden = false;
+  setupOnboarding();
 }
 
 /* ============================================================ */
@@ -2215,6 +2222,7 @@ function wireEvents(){
   };
   $('settingsBtn').onclick = openSettings;
   $('settingsClose').onclick = closeSettings;
+  $('replayTutorial').onclick = replayTutorial;
   $('fsRange').oninput = (e) => {
     state.itemFs = parseInt(e.target.value, 10);
     LS.set('grocereis.itemFs', state.itemFs);
