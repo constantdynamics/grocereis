@@ -20,32 +20,47 @@
     <div class="slide" data-step="0">
       <div class="logo big">G</div>
       <h2>Welkom bij <span class="grad">GROCEREIS</span></h2>
-      <p>Een neon boodschappen-OS. Plak je lijst, vink af terwijl je shopt, doe het samen.</p>
+      <p>Een neon boodschappen-OS. Plak je lijst, vink af terwijl je shopt, doe het samen — of maak er een wedstrijd van.</p>
     </div>
     <div class="slide" data-step="1">
       <div class="emoji">📋</div>
       <h2>Plak je lijst in één keer</h2>
-      <p>Eén item per regel, of comma-gescheiden. Streepjes, headers en multi-regel haakjes worden netjes herkend.</p>
+      <p>Eén item per regel of comma-gescheiden. Daarna staan items meteen op route-volgorde: gekoeld &amp; diepvries pak je als laatste, dus die staan onderaan.</p>
     </div>
     <div class="slide" data-step="2">
-      <div class="emoji">🧊</div>
-      <h2>Slimme supermarkt-volgorde</h2>
-      <p>Items staan op volgorde van de route. Gekoeld &amp; diepvries pakken jullie als laatste — die staan onderaan.</p>
-    </div>
-    <div class="slide" data-step="3">
       <div class="emoji">🎤</div>
       <h2>Voice in shop modus</h2>
       <p>Druk de microfoon en zeg wat je net hebt gepakt. We vragen eerst om bevestiging voordat we afstrepen.</p>
     </div>
-    <div class="slide" data-step="4">
-      <div class="emoji">🏆</div>
-      <h2>Wedstrijdmodus</h2>
-      <p>Tik het bekertje en zie live wie de meeste items in 't mandje heeft gegooid.</p>
+    <div class="slide race-slide" data-step="3">
+      <div class="emoji">🐫</div>
+      <h2>Kamelenrace mode</h2>
+      <p>Maak van boodschappen een wedstrijd! Iedereen krijgt een kameel die naar de finish rent met elk item dat je afvinkt. Start met 5-4-3-2-1-GO… en muziek.</p>
+      <div class="onb-race" id="onbRace" aria-hidden="true">
+        <div class="onb-lane">
+          <div class="onb-trail" style="--c:#00f0ff"></div>
+          <div class="onb-camel" style="--c:#00f0ff; --dur:3.1s">🐪</div>
+          <span class="onb-finish">🏁</span>
+        </div>
+        <div class="onb-lane">
+          <div class="onb-trail" style="--c:#ff4dd8"></div>
+          <div class="onb-camel" style="--c:#ff4dd8; --dur:3.8s">🐫</div>
+          <span class="onb-finish">🏁</span>
+        </div>
+        <div class="onb-lane">
+          <div class="onb-trail" style="--c:#ffd166"></div>
+          <div class="onb-camel" style="--c:#ffd166; --dur:4.4s">🐫</div>
+          <span class="onb-finish">🏁</span>
+        </div>
+      </div>
+      <button class="onb-music" id="onbMusic" type="button">
+        <span class="onb-music-ic">🔊</span><span class="onb-music-lbl">Speel de race-jingle</span>
+      </button>
     </div>
-    <div class="slide" data-step="5">
+    <div class="slide" data-step="4">
       <div class="emoji">👥</div>
       <h2>Shop met meerdere mensen</h2>
-      <p>Deel een 6-letter code of QR. Iedereen ziet realtime wat er nog moet en wie wat pakt.</p>
+      <p>Deel een 6-letter code of QR. Iedereen ziet realtime wat er nog moet, wie wat pakt — en wiens kameel voorop loopt.</p>
     </div>
   </div>
   <div class="dots" id="onbDots"></div>
@@ -167,6 +182,10 @@
           <span class="fs-preview-name">verse zalmfilet</span>
         </span>
       </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title">Hulp</div>
+      <button class="btn ghost" id="replayTutorial" type="button">🎬 Tutorial opnieuw bekijken</button>
     </div>
     <div class="row">
       <button class="btn" id="settingsClose" type="button">Sluit</button>
